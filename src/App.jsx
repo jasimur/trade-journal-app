@@ -8,7 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Trash2, X, Mail, Lock, Zap } from "lucide-react";
 
 const STORAGE_KEY = "trades";
 const DEFAULT_COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE"];
@@ -375,38 +375,175 @@ export default function TradeJournal() {
     return (
       <div className="tj-app tj-auth-screen">
         <style>{css}</style>
-        <form className="tj-login-card" onSubmit={handleLogin}>
-          <h1 className="tj-display tj-title">Trade Journal</h1>
-          <p className="tj-subtitle">Sign in to access your journal.</p>
 
-          <label className="tj-field">
-            <span>Email</span>
-            <input
-              type="email"
-              value={loginEmail}
-              onChange={(e) => setLoginEmail(e.target.value)}
-              autoComplete="email"
-              required
-            />
-          </label>
+        {/* Ambient backdrop: night sky, drifting embers, distant waves */}
+        <div className="tj-auth-bg" aria-hidden="true">
+          <div className="tj-auth-glow tj-auth-glow-a" />
+          <div className="tj-auth-glow tj-auth-glow-b" />
+          <div className="tj-auth-stars" />
+          <div className="tj-auth-embers">
+            {Array.from({ length: 14 }).map((_, i) => (
+              <span
+                key={i}
+                className="tj-ember"
+                style={{
+                  left: `${(i * 71 + 9) % 100}%`,
+                  animationDelay: `${(i % 7) * 0.85}s`,
+                  animationDuration: `${8 + (i % 5)}s`,
+                  "--c":
+                    i % 3 === 0
+                      ? "var(--accent)"
+                      : i % 3 === 1
+                      ? "var(--mana)"
+                      : "var(--pos)",
+                }}
+              />
+            ))}
+          </div>
+          <div className="tj-auth-waves">
+            <svg className="tj-wave tj-wave-back" viewBox="0 0 2400 200" preserveAspectRatio="none">
+              <path d="M0,110 C150,60 300,150 450,110 C600,70 750,150 900,110 C1050,70 1200,150 1350,110 C1500,70 1650,150 1800,110 C1950,70 2100,150 2250,110 L2400,110 L2400,200 L0,200 Z" />
+            </svg>
+            <svg className="tj-wave tj-wave-front" viewBox="0 0 2400 200" preserveAspectRatio="none">
+              <path d="M0,140 C180,90 320,170 500,140 C680,110 820,180 1000,140 C1180,100 1320,170 1500,140 C1680,110 1820,180 2000,140 C2180,100 2320,170 2400,150 L2400,200 L0,200 Z" />
+            </svg>
+          </div>
+        </div>
 
-          <label className="tj-field">
-            <span>Password</span>
-            <input
-              type="password"
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </label>
+        <div className="tj-auth-stage">
+          <div className="tj-auth-panel">
+            {/* Summoning circle behind the terminal */}
+            <svg className="tj-auth-circle" viewBox="0 0 400 400" aria-hidden="true">
+              <defs>
+                <radialGradient id="tjAuthGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="var(--mana)" stopOpacity="0.35" />
+                  <stop offset="100%" stopColor="var(--mana)" stopOpacity="0" />
+                </radialGradient>
+              </defs>
+              <circle cx="200" cy="200" r="150" fill="url(#tjAuthGlow)" />
+              <g className="tj-circle-ring tj-circle-ring-outer">
+                <circle cx="200" cy="200" r="178" fill="none" stroke="var(--mana)" strokeWidth="1" strokeDasharray="1 9" opacity="0.55" />
+              </g>
+              <g className="tj-circle-ring tj-circle-ring-mid">
+                <circle cx="200" cy="200" r="148" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeDasharray="20 14" opacity="0.4" />
+                <rect x="-6" y="-6" width="12" height="12" transform="translate(200,22) rotate(45)" fill="var(--accent)" opacity="0.6" />
+                <rect x="-6" y="-6" width="12" height="12" transform="translate(378,200) rotate(45)" fill="var(--accent)" opacity="0.6" />
+                <rect x="-6" y="-6" width="12" height="12" transform="translate(200,378) rotate(45)" fill="var(--accent)" opacity="0.6" />
+                <rect x="-6" y="-6" width="12" height="12" transform="translate(22,200) rotate(45)" fill="var(--accent)" opacity="0.6" />
+              </g>
+              <g className="tj-circle-ring tj-circle-ring-inner">
+                <circle cx="200" cy="200" r="118" fill="none" stroke="var(--mana)" strokeWidth="1" opacity="0.5" />
+              </g>
+              <g className="tj-circle-spark">
+                <circle cx="200" cy="22" r="3.5" fill="var(--accent)" />
+              </g>
+            </svg>
 
-          {loginError && <span className="tj-form-error">{loginError}</span>}
+            <form className="tj-auth-card" onSubmit={handleLogin}>
+              <span className="tj-auth-corner tj-auth-corner-tl" />
+              <span className="tj-auth-corner tj-auth-corner-tr" />
+              <span className="tj-auth-corner tj-auth-corner-bl" />
+              <span className="tj-auth-corner tj-auth-corner-br" />
 
-          <button type="submit" className="tj-btn-primary" disabled={loggingIn}>
-            {loggingIn ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
+              <div className="tj-auth-eyebrow tj-mono">
+                <span className="tj-auth-eyebrow-dot" />
+                Trader Guild · Access Terminal
+              </div>
+
+              <h1 className="tj-display tj-auth-title">Trade Journal</h1>
+              <p className="tj-auth-tagline">
+                Chart the seas, hunt the gains, and level up every trade.
+              </p>
+
+              <label className="tj-auth-field">
+                <span className="tj-auth-label">
+                  <Mail size={13} strokeWidth={2.2} />
+                  Email
+                </span>
+                <div className="tj-auth-input-wrap">
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    autoComplete="email"
+                    placeholder="you@guild.com"
+                    required
+                  />
+                  <span className="tj-auth-input-glow" />
+                </div>
+              </label>
+
+              <label className="tj-auth-field">
+                <span className="tj-auth-label">
+                  <Lock size={13} strokeWidth={2.2} />
+                  Password
+                </span>
+                <div className="tj-auth-input-wrap">
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    required
+                  />
+                  <span className="tj-auth-input-glow" />
+                </div>
+              </label>
+
+              {loginError && (
+                <div className="tj-auth-error" role="alert">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                    <path d="M12 3 L22 20 L2 20 Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                    <line x1="12" y1="9" x2="12" y2="14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <circle cx="12" cy="17" r="1" fill="currentColor" />
+                  </svg>
+                  {loginError}
+                </div>
+              )}
+
+              <button type="submit" className="tj-auth-btn" disabled={loggingIn}>
+                <span className="tj-auth-btn-shine" />
+                {loggingIn ? (
+                  <span className="tj-auth-btn-content">
+                    <span className="tj-auth-spinner" />
+                    Opening the gate…
+                  </span>
+                ) : (
+                  <span className="tj-auth-btn-content">
+                    <Zap size={16} strokeWidth={2.4} />
+                    Enter the Guild
+                  </span>
+                )}
+              </button>
+
+              <p className="tj-auth-footnote">Your journal, secured &amp; synced.</p>
+            </form>
+          </div>
+
+          <div
+            className={`tj-auth-slime ${loggingIn ? "tj-auth-slime-cheer" : ""} ${
+              loginError ? "tj-auth-slime-sad" : ""
+            }`}
+            aria-hidden="true"
+          >
+            <svg viewBox="0 0 120 96">
+              <ellipse className="tj-slime-shadow" cx="60" cy="90" rx="34" ry="5" />
+              <path
+                className="tj-slime-body"
+                d="M60,10 C82,10 100,32 100,54 C100,76 82,90 60,90 C38,90 20,76 20,54 C20,32 38,10 60,10 Z"
+              />
+              <ellipse className="tj-slime-shine" cx="42" cy="34" rx="9" ry="6" />
+              <g className="tj-slime-eyes">
+                <ellipse cx="48" cy="52" rx="4" ry="5.5" fill="#12141A" />
+                <ellipse cx="74" cy="52" rx="4" ry="5.5" fill="#12141A" />
+              </g>
+              <path className="tj-slime-mouth" d="M52,64 Q61,70 70,64" stroke="#12141A" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+              <ellipse cx="40" cy="60" rx="4.5" ry="3" className="tj-slime-blush" />
+              <ellipse cx="82" cy="60" rx="4.5" ry="3" className="tj-slime-blush" />
+            </svg>
+          </div>
+        </div>
       </div>
     );
   }
@@ -913,26 +1050,234 @@ const css = `
 .pos { color: var(--pos); }
 .neg { color: var(--neg); }
 
-.tj-auth-screen {
-  min-height: 70vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.tj-login-card {
-  width: min(380px, 100%);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.tj-login-card .tj-title { margin-bottom: 0; }
-.tj-login-card .tj-subtitle { margin-top: -8px; margin-bottom: 6px; }
-.tj-login-card .tj-btn-primary { margin-top: 4px; }
 .tj-btn-primary:disabled { opacity: .6; cursor: wait; }
+
+/* ===================== Auth screen — anime-inspired ===================== */
+
+.tj-app.tj-auth-screen {
+  --mana: #7C6CFF;
+  --mana-soft: rgba(124, 108, 255, 0.35);
+  --ink: #070912;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 22px;
+  background: radial-gradient(120% 90% at 50% -10%, #1b2044 0%, var(--ink) 55%), var(--ink);
+}
+
+/* --- Backdrop layers --- */
+.tj-auth-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+
+.tj-auth-glow { position: absolute; width: 420px; height: 420px; border-radius: 50%; filter: blur(80px); opacity: 0.32; animation: tjGlowDrift 15s ease-in-out infinite alternate; }
+.tj-auth-glow-a { background: var(--mana); top: -140px; left: -120px; }
+.tj-auth-glow-b { background: var(--accent); bottom: -160px; right: -120px; animation-duration: 18s; animation-delay: -4s; }
+@keyframes tjGlowDrift { from { transform: translate(0,0) scale(1); } to { transform: translate(28px,18px) scale(1.12); } }
+
+.tj-auth-stars {
+  position: absolute; inset: 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,0.55) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 65% 15%, rgba(255,255,255,0.4) 50%, transparent 100%),
+    radial-gradient(1px 1px at 80% 55%, rgba(255,255,255,0.5) 50%, transparent 100%),
+    radial-gradient(1px 1px at 35% 70%, rgba(255,255,255,0.35) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 50% 40%, rgba(255,255,255,0.4) 50%, transparent 100%),
+    radial-gradient(1px 1px at 90% 80%, rgba(255,255,255,0.3) 50%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 10% 85%, rgba(255,255,255,0.4) 50%, transparent 100%);
+  animation: tjTwinkle 5s ease-in-out infinite alternate;
+}
+@keyframes tjTwinkle { from { opacity: 0.5; } to { opacity: 1; } }
+
+.tj-auth-embers { position: absolute; inset: 0; }
+.tj-ember {
+  position: absolute; bottom: -10px; width: 4px; height: 4px; border-radius: 50%;
+  background: var(--c); box-shadow: 0 0 6px var(--c);
+  opacity: 0; animation-name: tjEmberRise; animation-timing-function: ease-in; animation-iteration-count: infinite;
+}
+@keyframes tjEmberRise {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  10% { opacity: 0.85; }
+  90% { opacity: 0.5; }
+  100% { transform: translateY(-360px) translateX(14px); opacity: 0; }
+}
+
+.tj-auth-waves { position: absolute; left: 0; right: 0; bottom: 0; height: 150px; overflow: hidden; }
+.tj-wave { position: absolute; bottom: 0; left: 0; width: 200%; height: 100%; }
+.tj-wave-back { opacity: 0.16; animation: tjWaveDrift 22s linear infinite; }
+.tj-wave-back path { fill: var(--mana); }
+.tj-wave-front { opacity: 0.22; animation: tjWaveDrift 14s linear infinite reverse; }
+.tj-wave-front path { fill: var(--accent); }
+@keyframes tjWaveDrift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* --- Stage / layout --- */
+.tj-auth-stage {
+  position: relative; z-index: 1; min-height: 640px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 22px; padding: 56px 20px 44px;
+}
+
+.tj-auth-panel { position: relative; width: min(420px, 100%); display: flex; align-items: center; justify-content: center; }
+
+/* --- Summoning circle --- */
+.tj-auth-circle {
+  position: absolute; top: 50%; left: 50%; width: 150%; height: 150%;
+  transform: translate(-50%,-50%); z-index: 0; pointer-events: none;
+  animation: tjCircleFadeIn 1s ease-out both;
+}
+@keyframes tjCircleFadeIn { from { opacity: 0; transform: translate(-50%,-50%) scale(0.85); } to { opacity: 1; transform: translate(-50%,-50%) scale(1); } }
+.tj-circle-ring, .tj-circle-spark { transform-box: fill-box; transform-origin: 50% 50%; }
+.tj-circle-ring-mid { animation: tjRotateCW 46s linear infinite; }
+.tj-circle-ring-inner { animation: tjRotateCCW 60s linear infinite; }
+.tj-circle-spark { animation: tjRotateCW 7s linear infinite; }
+@keyframes tjRotateCW { to { transform: rotate(360deg); } }
+@keyframes tjRotateCCW { to { transform: rotate(-360deg); } }
+
+/* --- Card / "system window" --- */
+.tj-auth-card {
+  position: relative; z-index: 1; width: 100%;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 34px 30px 28px;
+  background: transparent;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(124,108,255,0.14);
+  animation: tjCardRise 0.8s cubic-bezier(.2,.9,.25,1) 0.15s both, tjBreathe 5s ease-in-out 1s infinite;
+}
+.tj-auth-card::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(165deg, rgba(26,30,45,0.92), rgba(14,16,26,0.94));
+  border: 1px solid var(--mana-soft);
+  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+@keyframes tjCardRise { from { opacity: 0; transform: translateY(26px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes tjBreathe {
+  0%, 100% { box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 40px rgba(124,108,255,0.14); }
+  50% { box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 60px rgba(124,108,255,0.24); }
+}
+
+.tj-auth-corner { position: absolute; width: 18px; height: 18px; opacity: 0.85; animation: tjCornerPulse 3.2s ease-in-out infinite; pointer-events: none; }
+.tj-auth-corner-tl { top: 10px; left: 10px; border-top: 2px solid var(--mana); border-left: 2px solid var(--mana); }
+.tj-auth-corner-tr { top: 10px; right: 10px; border-top: 2px solid var(--mana); border-right: 2px solid var(--mana); animation-delay: 0.4s; }
+.tj-auth-corner-bl { bottom: 10px; left: 10px; border-bottom: 2px solid var(--accent); border-left: 2px solid var(--accent); animation-delay: 0.8s; }
+.tj-auth-corner-br { bottom: 10px; right: 10px; border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); animation-delay: 1.2s; }
+@keyframes tjCornerPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+.tj-auth-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px; align-self: flex-start;
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mana);
+}
+.tj-auth-eyebrow-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pos); box-shadow: 0 0 8px var(--pos); animation: tjTwinkle 1.6s ease-in-out infinite; }
+
+.tj-auth-title {
+  margin: 2px 0 0; font-size: clamp(24px, 5vw, 30px); font-weight: 700; letter-spacing: -0.01em;
+  background: linear-gradient(90deg, var(--text) 0%, var(--accent) 45%, var(--mana) 70%, var(--text) 100%);
+  background-size: 240% auto;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: tjTitleShimmer 6s linear infinite;
+}
+@keyframes tjTitleShimmer { to { background-position: -240% center; } }
+
+.tj-auth-tagline { margin: 0 0 6px; color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+
+.tj-auth-field { display: flex; flex-direction: column; gap: 6px; }
+.tj-auth-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.tj-auth-label svg { color: var(--mana); }
+.tj-auth-input-wrap { position: relative; }
+.tj-auth-input-wrap input {
+  width: 100%; background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: 9px; padding: 11px 13px; color: var(--text); font-size: 14px;
+  font-family: 'IBM Plex Mono', monospace; transition: border-color .2s, box-shadow .2s, background .2s;
+}
+.tj-auth-input-wrap input::placeholder { color: rgba(136,145,163,0.55); }
+.tj-auth-input-wrap input:focus {
+  outline: none; border-color: var(--mana); background: rgba(124,108,255,0.06);
+  box-shadow: 0 0 0 3px rgba(124,108,255,0.14), 0 0 20px rgba(124,108,255,0.2);
+}
+.tj-auth-input-glow {
+  position: absolute; left: 10%; right: 10%; bottom: -1px; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--mana), transparent);
+  transform: scaleX(0); transform-origin: center; transition: transform .3s ease;
+}
+.tj-auth-input-wrap input:focus ~ .tj-auth-input-glow { transform: scaleX(1); }
+
+.tj-auth-error {
+  display: flex; align-items: center; gap: 7px; color: var(--neg);
+  background: rgba(242,84,91,0.1); border: 1px solid rgba(242,84,91,0.35);
+  border-radius: 8px; padding: 8px 11px; font-size: 12.5px;
+  animation: tjErrorIn .4s ease;
+}
+@keyframes tjErrorIn {
+  0% { opacity: 0; }
+  20% { opacity: 1; transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+  100% { transform: translateX(0); }
+}
+
+.tj-auth-btn {
+  position: relative; overflow: hidden; margin-top: 4px; border: none; border-radius: 10px;
+  padding: 13px 18px; font-size: 14.5px; font-weight: 700; letter-spacing: 0.01em; cursor: pointer;
+  color: #191305; background: linear-gradient(135deg, var(--accent), #f4c869 45%, var(--mana));
+  box-shadow: 0 8px 24px rgba(232,163,61,0.25), 0 0 0 1px rgba(255,255,255,0.06) inset;
+  transition: transform .18s ease, box-shadow .18s ease, opacity .18s ease;
+}
+.tj-auth-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(232,163,61,0.32), 0 0 24px rgba(124,108,255,0.25); }
+.tj-auth-btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+.tj-auth-btn:disabled { cursor: wait; opacity: 0.9; }
+.tj-auth-btn-content { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.tj-auth-btn-shine {
+  position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
+  background: linear-gradient(120deg, transparent, rgba(255,255,255,0.55), transparent);
+  transform: skewX(-20deg); transition: left .6s ease;
+}
+.tj-auth-btn:hover:not(:disabled) .tj-auth-btn-shine { left: 130%; }
+.tj-auth-spinner {
+  width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(25,19,5,0.25);
+  border-top-color: #191305; animation: tjSpin .7s linear infinite;
+}
+@keyframes tjSpin { to { transform: rotate(360deg); } }
+
+.tj-auth-footnote { margin: 2px 0 0; text-align: center; font-size: 11px; color: var(--text-muted); opacity: 0.7; }
+
+/* --- Slime companion --- */
+.tj-auth-slime { width: clamp(58px, 16vw, 78px); animation: tjSlimeBounce 2.6s ease-in-out infinite; }
+.tj-auth-slime svg { width: 100%; height: auto; display: block; }
+.tj-slime-shadow { fill: rgba(0,0,0,0.35); }
+.tj-slime-body { fill: var(--pos); }
+.tj-slime-shine { fill: rgba(255,255,255,0.35); }
+.tj-slime-blush { fill: rgba(232,163,61,0.45); }
+.tj-slime-eyes { transform-box: fill-box; transform-origin: 50% 50%; animation: tjSlimeBlink 4.5s ease-in-out infinite; }
+@keyframes tjSlimeBounce {
+  0%, 100% { transform: translateY(0); }
+  45%, 60% { transform: translateY(-9px); }
+}
+@keyframes tjSlimeBlink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.15); }
+}
+.tj-auth-slime-cheer { animation: tjSlimeCheer 0.6s ease-in-out infinite; }
+@keyframes tjSlimeCheer {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-14px) rotate(-6deg); }
+}
+.tj-auth-slime-sad { animation: tjSlimeSad 1.6s ease-in-out; }
+@keyframes tjSlimeSad {
+  0% { transform: translateY(0) scaleY(1) rotate(0deg); }
+  30% { transform: translateY(4px) scaleY(0.85) rotate(-3deg); }
+  60% { transform: translateY(2px) scaleY(0.92) rotate(2deg); }
+  100% { transform: translateY(0) scaleY(1) rotate(0deg); }
+}
+
+@media (max-width: 640px) {
+  .tj-auth-stage { min-height: 600px; padding: 44px 16px 34px; gap: 18px; }
+  .tj-auth-card { padding: 26px 20px 22px; }
+  .tj-auth-glow { width: 280px; height: 280px; filter: blur(60px); }
+  .tj-auth-waves { height: 100px; }
+}
+@media (max-width: 420px) {
+  .tj-auth-stage { min-height: 560px; }
+  .tj-ember:nth-child(n+9) { display: none; }
+}
 
 /* Header */
 .tj-header { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
