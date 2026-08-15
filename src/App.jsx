@@ -8,7 +8,22 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { Pencil, Trash2, X, Mail, Lock, Zap } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  X,
+  Mail,
+  Lock,
+  Zap,
+  CalendarRange,
+  Flame,
+  Target,
+  ShieldAlert,
+  TrendingUp,
+  TrendingDown,
+  Trophy,
+  Skull,
+} from "lucide-react";
 
 const STORAGE_KEY = "trades";
 const DEFAULT_COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE"];
@@ -74,6 +89,111 @@ function getWeekInfo(dateInput) {
   return { key, monday, sunday, label };
 }
 
+function getMonthInfo(dateInput) {
+  const d = new Date(dateInput);
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  first.setHours(0, 0, 0, 0);
+  const key = `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, "0")}`;
+  const label = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return { key, first, label };
+}
+
+function toDateInputStr(d) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function computeStreaks(sortedAsc) {
+  let currentType = null;
+  let currentCount = 0;
+  let bestWinStreak = 0;
+  let worstLossStreak = 0;
+  let runWin = 0;
+  let runLoss = 0;
+
+  sortedAsc.forEach((t) => {
+    if (t.pnl > 0) {
+      runWin += 1;
+      runLoss = 0;
+    } else if (t.pnl < 0) {
+      runLoss += 1;
+      runWin = 0;
+    } else {
+      runWin = 0;
+      runLoss = 0;
+    }
+    if (runWin > bestWinStreak) bestWinStreak = runWin;
+    if (runLoss > worstLossStreak) worstLossStreak = runLoss;
+  });
+
+  for (let i = sortedAsc.length - 1; i >= 0; i--) {
+    const t = sortedAsc[i];
+    const type = t.pnl > 0 ? "win" : t.pnl < 0 ? "loss" : null;
+    if (type === null) break;
+    if (currentType === null) {
+      currentType = type;
+      currentCount = 1;
+    } else if (type === currentType) {
+      currentCount += 1;
+    } else {
+      break;
+    }
+  }
+
+  return { currentType, currentCount, bestWinStreak, worstLossStreak };
+}
+
+function computeMaxDrawdown(sortedAsc) {
+  let peak = 0;
+  let running = 0;
+  let maxDD = 0;
+  sortedAsc.forEach((t) => {
+    running += t.pnl;
+    if (running > peak) peak = running;
+    const dd = peak - running;
+    if (dd > maxDD) maxDD = dd;
+  });
+  return maxDD;
+}
+
+function computeProfitFactor(trades) {
+  const grossProfit = trades.filter((t) => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
+  const grossLoss = Math.abs(trades.filter((t) => t.pnl < 0).reduce((s, t) => s + t.pnl, 0));
+  if (grossLoss === 0) return grossProfit > 0 ? Infinity : null;
+  return grossProfit / grossLoss;
+}
+
+const RANKS = [
+  { threshold: 0, title: "Market Novice" },
+  { threshold: 5, title: "Chart Apprentice" },
+  { threshold: 15, title: "Signal Seeker" },
+  { threshold: 30, title: "Blade of the Trend" },
+  { threshold: 50, title: "Risk Warden" },
+  { threshold: 80, title: "Market Sage" },
+  { threshold: 120, title: "Guild Vanguard" },
+  { threshold: 200, title: "Legendary Trader" },
+];
+
+function getRankInfo(totalTrades) {
+  let idx = 0;
+  for (let i = 0; i < RANKS.length; i++) {
+    if (totalTrades >= RANKS[i].threshold) idx = i;
+  }
+  const current = RANKS[idx];
+  const next = RANKS[idx + 1];
+  const progress = next
+    ? ((totalTrades - current.threshold) / (next.threshold - current.threshold)) * 100
+    : 100;
+  return {
+    level: idx + 1,
+    title: current.title,
+    nextTitle: next ? next.title : null,
+    tradesToNext: next ? next.threshold - totalTrades : 0,
+    progress: Math.max(0, Math.min(100, progress)),
+    isMax: !next,
+  };
+}
+
 const emptyForm = () => ({
   datetime: nowLocalInput(),
   coin: "",
@@ -99,7 +219,7 @@ export default function TradeJournal() {
   const [editingId, setEditingId] = useState(null);
   const [formError, setFormError] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
-  const [resetConfirm, setResetConfirm] = useState(false);
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -256,26 +376,37 @@ export default function TradeJournal() {
     setPendingDeleteId(null);
   }
 
-  function handleReset() {
-    persist([]);
-    cancelEdit();
-    setResetConfirm(false);
-  }
+  const filteredTrades = useMemo(() => {
+    if (!dateRange.start && !dateRange.end) return trades;
+    let startTime = dateRange.start ? new Date(`${dateRange.start}T00:00:00`).getTime() : -Infinity;
+    let endTime = dateRange.end ? new Date(`${dateRange.end}T23:59:59.999`).getTime() : Infinity;
+    if (startTime > endTime) {
+      const tmp = startTime;
+      startTime = endTime;
+      endTime = tmp;
+    }
+    return trades.filter((t) => {
+      const time = new Date(t.datetime).getTime();
+      return time >= startTime && time <= endTime;
+    });
+  }, [trades, dateRange]);
+
+  const isFiltered = Boolean(dateRange.start || dateRange.end);
 
   const stats = useMemo(() => {
-    const total = trades.length;
-    const totalPnl = trades.reduce((s, t) => s + t.pnl, 0);
-    const totalMargin = trades.reduce((s, t) => s + t.margin, 0);
-    const wins = trades.filter((t) => t.pnl > 0).length;
-    const losses = trades.filter((t) => t.pnl < 0).length;
+    const total = filteredTrades.length;
+    const totalPnl = filteredTrades.reduce((s, t) => s + t.pnl, 0);
+    const totalMargin = filteredTrades.reduce((s, t) => s + t.margin, 0);
+    const wins = filteredTrades.filter((t) => t.pnl > 0).length;
+    const losses = filteredTrades.filter((t) => t.pnl < 0).length;
     const winRate = total ? (wins / total) * 100 : 0;
     const avgPnl = total ? totalPnl / total : 0;
     return { total, totalPnl, totalMargin, wins, losses, winRate, avgPnl };
-  }, [trades]);
+  }, [filteredTrades]);
 
   const weeklyGroups = useMemo(() => {
     const map = new Map();
-    trades.forEach((t) => {
+    filteredTrades.forEach((t) => {
       const { key, label, monday } = getWeekInfo(t.datetime);
       if (!map.has(key)) map.set(key, { key, label, monday, trades: [] });
       map.get(key).trades.push(t);
@@ -290,13 +421,34 @@ export default function TradeJournal() {
     });
     arr.sort((a, b) => b.monday.getTime() - a.monday.getTime());
     return arr;
-  }, [trades]);
+  }, [filteredTrades]);
 
   const thisWeekKey = getWeekInfo(new Date()).key;
 
+  const monthlyGroups = useMemo(() => {
+    const map = new Map();
+    filteredTrades.forEach((t) => {
+      const { key, label, first } = getMonthInfo(t.datetime);
+      if (!map.has(key)) map.set(key, { key, label, first, trades: [] });
+      map.get(key).trades.push(t);
+    });
+    const arr = Array.from(map.values()).map((m) => {
+      const total = m.trades.length;
+      const pnl = m.trades.reduce((s, t) => s + t.pnl, 0);
+      const margin = m.trades.reduce((s, t) => s + t.margin, 0);
+      const wins = m.trades.filter((t) => t.pnl > 0).length;
+      const winRate = total ? (wins / total) * 100 : 0;
+      return { ...m, total, pnl, margin, winRate };
+    });
+    arr.sort((a, b) => b.first.getTime() - a.first.getTime());
+    return arr;
+  }, [filteredTrades]);
+
+  const thisMonthKey = getMonthInfo(new Date()).key;
+
   const coinStats = useMemo(() => {
     const map = new Map();
-    trades.forEach((t) => {
+    filteredTrades.forEach((t) => {
       if (!map.has(t.coin)) map.set(t.coin, { coin: t.coin, trades: [] });
       map.get(t.coin).trades.push(t);
     });
@@ -309,11 +461,11 @@ export default function TradeJournal() {
     });
     arr.sort((a, b) => b.pnl - a.pnl);
     return arr;
-  }, [trades]);
+  }, [filteredTrades]);
 
   const directionStats = useMemo(() => {
     const build = (dir) => {
-      const list = trades.filter((t) => t.direction === dir);
+      const list = filteredTrades.filter((t) => t.direction === dir);
       const total = list.length;
       const pnl = list.reduce((s, t) => s + t.pnl, 0);
       const wins = list.filter((t) => t.pnl > 0).length;
@@ -321,10 +473,10 @@ export default function TradeJournal() {
       return { total, pnl, winRate };
     };
     return { long: build("long"), short: build("short") };
-  }, [trades]);
+  }, [filteredTrades]);
 
   const chartData = useMemo(() => {
-    const sorted = [...trades].sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+    const sorted = [...filteredTrades].sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
     let running = 0;
     return sorted.map((t, i) => {
       running += t.pnl;
@@ -334,17 +486,39 @@ export default function TradeJournal() {
         cumulative: Math.round(running * 100) / 100,
       };
     });
-  }, [trades]);
+  }, [filteredTrades]);
 
   const sortedTradesDesc = useMemo(
-    () => [...trades].sort((a, b) => new Date(b.datetime) - new Date(a.datetime)),
-    [trades]
+    () => [...filteredTrades].sort((a, b) => new Date(b.datetime) - new Date(a.datetime)),
+    [filteredTrades]
   );
 
   const coinOptions = useMemo(() => {
     const used = trades.map((t) => t.coin);
     return Array.from(new Set([...used, ...DEFAULT_COINS])).sort();
   }, [trades]);
+
+  const insights = useMemo(() => {
+    const sortedAsc = [...filteredTrades].sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
+    const streaks = computeStreaks(sortedAsc);
+    const maxDrawdown = computeMaxDrawdown(sortedAsc);
+    const profitFactor = computeProfitFactor(filteredTrades);
+    const wins = filteredTrades.filter((t) => t.pnl > 0);
+    const losses = filteredTrades.filter((t) => t.pnl < 0);
+    const avgWin = wins.length ? wins.reduce((s, t) => s + t.pnl, 0) / wins.length : 0;
+    const avgLoss = losses.length ? losses.reduce((s, t) => s + t.pnl, 0) / losses.length : 0;
+    const bestTrade = filteredTrades.reduce(
+      (best, t) => (!best || t.pnl > best.pnl ? t : best),
+      null
+    );
+    const worstTrade = filteredTrades.reduce(
+      (worst, t) => (!worst || t.pnl < worst.pnl ? t : worst),
+      null
+    );
+    return { streaks, maxDrawdown, profitFactor, avgWin, avgLoss, bestTrade, worstTrade };
+  }, [filteredTrades]);
+
+  const rank = useMemo(() => getRankInfo(stats.total), [stats.total]);
 
   const marginVal = parseFloat(form.margin);
   const pnlVal = parseFloat(form.pnl);
@@ -356,6 +530,7 @@ export default function TradeJournal() {
   const tabs = [
     { id: "dashboard", label: "Dashboard" },
     { id: "weekly", label: "Weekly" },
+    { id: "monthly", label: "Monthly" },
     { id: "coins", label: "Coins" },
     { id: "longshort", label: "Long / Short" },
     { id: "chart", label: "Chart" },
@@ -565,7 +740,7 @@ export default function TradeJournal() {
         <div>
           <h1 className="tj-display tj-title">Trade Journal</h1>
           <p className="tj-subtitle tj-mono">
-            {stats.total} trade{stats.total !== 1 ? "s" : ""} logged
+            {trades.length} trade{trades.length !== 1 ? "s" : ""} logged
           </p>
         </div>
         <div className="tj-header-actions">
@@ -576,28 +751,13 @@ export default function TradeJournal() {
           >
             Sign out
           </button>
-          {trades.length > 0 &&
-            (resetConfirm ? (
-              <span className="tj-reset-confirm">
-                <button type="button" className="tj-link-btn tj-link-danger" onClick={handleReset}>
-                  Confirm clear
-                </button>
-                <button type="button" className="tj-link-btn" onClick={() => setResetConfirm(false)}>
-                  Cancel
-                </button>
-              </span>
-            ) : (
-              <button type="button" className="tj-link-btn tj-muted" onClick={() => setResetConfirm(true)}>
-                Clear all data
-              </button>
-            ))}
         </div>
       </header>
 
       <form className="tj-ticket" onSubmit={handleSubmit}>
         <div className="tj-ticket-stub">
           <span className="tj-mono tj-ticket-num">
-            {editingId ? "EDITING TICKET" : `№ ${String(stats.total + 1).padStart(4, "0")}`}
+            {editingId ? "EDITING TICKET" : `№ ${String(trades.length + 1).padStart(4, "0")}`}
           </span>
           <span className="tj-mono tj-ticket-date">
             {new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
@@ -756,9 +916,21 @@ export default function TradeJournal() {
         ))}
       </nav>
 
+      {trades.length > 0 && (
+        <DateRangeFilter
+          range={dateRange}
+          onChange={setDateRange}
+          totalCount={trades.length}
+          filteredCount={filteredTrades.length}
+        />
+      )}
+
       <main className="tj-main">
-        {activeTab === "dashboard" && <DashboardView stats={stats} />}
+        {activeTab === "dashboard" && (
+          <DashboardView stats={stats} insights={insights} rank={rank} isFiltered={isFiltered} />
+        )}
         {activeTab === "weekly" && <WeeklyView weeks={weeklyGroups} thisWeekKey={thisWeekKey} />}
+        {activeTab === "monthly" && <MonthlyView months={monthlyGroups} thisMonthKey={thisMonthKey} />}
         {activeTab === "coins" && <CoinsView coins={coinStats} />}
         {activeTab === "longshort" && <LongShortView data={directionStats} />}
         {activeTab === "chart" && <ChartView data={chartData} />}
@@ -777,22 +949,188 @@ export default function TradeJournal() {
   );
 }
 
+function DateRangeFilter({ range, onChange, totalCount, filteredCount }) {
+  const active = Boolean(range.start || range.end);
+
+  function applyPreset(id) {
+    const today = new Date();
+    if (id === "all") {
+      onChange({ start: "", end: "" });
+      return;
+    }
+    const end = toDateInputStr(today);
+    let startDate = new Date(today);
+    if (id === "7d") startDate.setDate(startDate.getDate() - 6);
+    else if (id === "30d") startDate.setDate(startDate.getDate() - 29);
+    else if (id === "90d") startDate.setDate(startDate.getDate() - 89);
+    else if (id === "month") startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    onChange({ start: toDateInputStr(startDate), end });
+  }
+
+  return (
+    <div className="tj-filter-bar">
+      <div className="tj-filter-icon" aria-hidden="true">
+        <CalendarRange size={15} />
+      </div>
+      <div className="tj-filter-presets">
+        <button type="button" className={`tj-filter-chip ${!active ? "active" : ""}`} onClick={() => applyPreset("all")}>
+          All time
+        </button>
+        <button type="button" className="tj-filter-chip" onClick={() => applyPreset("7d")}>
+          7D
+        </button>
+        <button type="button" className="tj-filter-chip" onClick={() => applyPreset("30d")}>
+          30D
+        </button>
+        <button type="button" className="tj-filter-chip" onClick={() => applyPreset("90d")}>
+          90D
+        </button>
+        <button type="button" className="tj-filter-chip" onClick={() => applyPreset("month")}>
+          This month
+        </button>
+      </div>
+      <label className="tj-filter-date">
+        <span>From</span>
+        <input
+          type="date"
+          value={range.start}
+          max={range.end || undefined}
+          onChange={(e) => onChange({ ...range, start: e.target.value })}
+        />
+      </label>
+      <label className="tj-filter-date">
+        <span>To</span>
+        <input
+          type="date"
+          value={range.end}
+          min={range.start || undefined}
+          onChange={(e) => onChange({ ...range, end: e.target.value })}
+        />
+      </label>
+      {active && (
+        <button type="button" className="tj-filter-clear" onClick={() => onChange({ start: "", end: "" })}>
+          <X size={12} /> Clear
+        </button>
+      )}
+      <span className="tj-filter-count tj-mono">
+        {active ? `${filteredCount} / ${totalCount} trades` : `${totalCount} trades`}
+      </span>
+    </div>
+  );
+}
+
 function EmptyState({ text }) {
   return <p className="tj-empty">{text || "No trades yet. Log your first trade above to start building your journal."}</p>;
 }
 
-function StatCard({ label, value, tone }) {
+function StatCard({ label, value, tone, icon }) {
   return (
     <div className="tj-card">
-      <span className="tj-card-label">{label}</span>
+      <span className="tj-card-label">
+        {icon && <span className="tj-card-icon">{icon}</span>}
+        {label}
+      </span>
       <span className={`tj-mono tj-card-value ${tone || ""}`}>{value}</span>
     </div>
   );
 }
 
-function DashboardView({ stats }) {
+function fmtRatio(n) {
+  if (n === null || n === undefined) return "—";
+  if (n === Infinity) return "∞";
+  return n.toFixed(2);
+}
+
+function RankCompanion({ level, onFire }) {
+  return (
+    <div className={`tj-rank-emblem ${onFire ? "tj-rank-emblem-fire" : ""}`}>
+      <svg className="tj-rank-ring" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="46" fill="none" stroke="var(--mana)" strokeWidth="1.5" strokeDasharray="4 6" opacity="0.55" />
+      </svg>
+      <svg className="tj-rank-ring tj-rank-ring-2" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="38" fill="none" stroke="var(--accent)" strokeWidth="1" strokeDasharray="1 6" opacity="0.5" />
+      </svg>
+      <div className="tj-rank-crystal">
+        <span className="tj-mono tj-rank-level">{level}</span>
+      </div>
+      {onFire && <Flame size={14} className="tj-rank-flame" aria-hidden="true" />}
+    </div>
+  );
+}
+
+function RankCard({ rank, streaks, isFiltered }) {
+  const onFire = streaks.currentType === "win" && streaks.currentCount >= 3;
+  return (
+    <div className="tj-rank-card">
+      <RankCompanion level={rank.level} onFire={onFire} />
+      <div className="tj-rank-info">
+        <div className="tj-rank-toptext">
+          <span className="tj-display tj-rank-title">{rank.title}</span>
+          <span className="tj-mono tj-rank-lvl-tag">LV.{rank.level}</span>
+        </div>
+        <div className="tj-xp-track" role="progressbar" aria-valuenow={Math.round(rank.progress)} aria-valuemin={0} aria-valuemax={100}>
+          <div className="tj-xp-fill" style={{ width: `${rank.progress}%` }} />
+        </div>
+        <div className="tj-rank-sub tj-mono">
+          {rank.isMax
+            ? "Max rank reached — legendary trading status."
+            : `${rank.tradesToNext} trade${rank.tradesToNext === 1 ? "" : "s"} to ${rank.nextTitle}`}
+          {isFiltered && <span className="tj-rank-filtered-tag"> · in selected range</span>}
+        </div>
+        <div className={`tj-rank-streak ${streaks.currentType === "win" ? "pos" : streaks.currentType === "loss" ? "neg" : ""}`}>
+          <Flame size={13} aria-hidden="true" />
+          <span className="tj-mono">
+            {streaks.currentCount > 0
+              ? `${streaks.currentCount} trade ${streaks.currentType} streak`
+              : "No active streak"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HighlightTradeCard({ label, trade, tone, icon }) {
+  return (
+    <div className="tj-card tj-highlight-card">
+      <span className="tj-card-label">
+        {icon && <span className="tj-card-icon">{icon}</span>}
+        {label}
+      </span>
+      {trade ? (
+        <>
+          <span className={`tj-mono tj-card-value ${tone || ""}`}>{fmtMoney(trade.pnl)}</span>
+          <span className="tj-highlight-meta tj-mono">
+            {trade.coin} · {trade.direction} ·{" "}
+            {new Date(trade.datetime).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+          </span>
+        </>
+      ) : (
+        <span className="tj-mono tj-card-value">—</span>
+      )}
+    </div>
+  );
+}
+
+function DashboardView({ stats, insights, rank, isFiltered }) {
+  if (stats.total === 0) {
+    return (
+      <div>
+        <EmptyState
+          text={
+            isFiltered
+              ? "No trades in the selected date range. Try widening the range."
+              : "No trades yet. Log your first trade above to start building your journal."
+          }
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
+      <RankCard rank={rank} streaks={insights.streaks} isFiltered={isFiltered} />
+
       <div className="tj-hero">
         <span className="tj-hero-label">Total PNL</span>
         <span
@@ -815,7 +1153,37 @@ function DashboardView({ stats }) {
           tone={stats.avgPnl > 0 ? "pos" : stats.avgPnl < 0 ? "neg" : ""}
         />
       </div>
-      {stats.total === 0 && <EmptyState />}
+
+      <h3 className="tj-section-title">Performance insights</h3>
+      <div className="tj-stat-grid tj-insight-grid">
+        <StatCard
+          label="Profit factor"
+          value={fmtRatio(insights.profitFactor)}
+          icon={<Target size={13} />}
+        />
+        <StatCard
+          label="Max drawdown"
+          value={fmtMoney(insights.maxDrawdown)}
+          tone={insights.maxDrawdown > 0 ? "neg" : ""}
+          icon={<ShieldAlert size={13} />}
+        />
+        <StatCard label="Avg win" value={fmtMoney(insights.avgWin)} tone="pos" icon={<TrendingUp size={13} />} />
+        <StatCard label="Avg loss" value={fmtMoney(insights.avgLoss)} tone="neg" icon={<TrendingDown size={13} />} />
+        <StatCard
+          label="Best win streak"
+          value={insights.streaks.bestWinStreak}
+          tone={insights.streaks.bestWinStreak > 0 ? "pos" : ""}
+          icon={<Flame size={13} />}
+        />
+        <StatCard
+          label="Worst losing streak"
+          value={insights.streaks.worstLossStreak}
+          tone={insights.streaks.worstLossStreak > 0 ? "neg" : ""}
+          icon={<ShieldAlert size={13} />}
+        />
+        <HighlightTradeCard label="Best trade" trade={insights.bestTrade} tone="pos" icon={<Trophy size={13} />} />
+        <HighlightTradeCard label="Worst trade" trade={insights.worstTrade} tone="neg" icon={<Skull size={13} />} />
+      </div>
     </div>
   );
 }
@@ -860,6 +1228,55 @@ function WeeklyView({ weeks, thisWeekKey }) {
                 <td className="tj-mono">{w.total}</td>
                 <td className={`tj-mono ${w.pnl > 0 ? "pos" : w.pnl < 0 ? "neg" : ""}`}>{fmtMoney(w.pnl)}</td>
                 <td className="tj-mono">{fmtPct(w.winRate)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function MonthlyView({ months, thisMonthKey }) {
+  const current = months.find((m) => m.key === thisMonthKey);
+  const previous = months.filter((m) => m.key !== thisMonthKey);
+  return (
+    <div>
+      <div className="tj-hero tj-hero-week">
+        <span className="tj-hero-label">This month{current ? ` · ${current.label}` : ""}</span>
+        <span
+          className={`tj-mono tj-hero-value ${
+            current && current.pnl > 0 ? "pos" : current && current.pnl < 0 ? "neg" : ""
+          }`}
+        >
+          {fmtMoney(current ? current.pnl : 0)}
+        </span>
+      </div>
+      <div className="tj-stat-grid">
+        <StatCard label="Trades this month" value={current ? current.total : 0} />
+        <StatCard label="Monthly margin" value={fmtMoney(current ? current.margin : 0)} />
+        <StatCard label="Monthly win rate" value={fmtPct(current ? current.winRate : 0)} />
+      </div>
+      <h3 className="tj-section-title">Previous months</h3>
+      {previous.length === 0 ? (
+        <EmptyState text="No previous months yet — keep logging to build a month-over-month view." />
+      ) : (
+        <table className="tj-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Trades</th>
+              <th>PNL</th>
+              <th>Win rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {previous.map((m) => (
+              <tr key={m.key}>
+                <td>{m.label}</td>
+                <td className="tj-mono">{m.total}</td>
+                <td className={`tj-mono ${m.pnl > 0 ? "pos" : m.pnl < 0 ? "neg" : ""}`}>{fmtMoney(m.pnl)}</td>
+                <td className="tj-mono">{fmtPct(m.winRate)}</td>
               </tr>
             ))}
           </tbody>
@@ -1031,6 +1448,7 @@ const css = `
   --short: #2FB8AC;
   --pos: #3ECF8E;
   --neg: #F2545B;
+  --mana: #7C6CFF;
 
   background: var(--bg);
   color: var(--text);
@@ -1285,8 +1703,6 @@ const css = `
 .tj-subtitle { color: var(--text-muted); font-size: 13px; margin:4px 0 0; }
 .tj-link-btn { background:none; border:none; color: var(--text-muted); font-size:12px; cursor:pointer; padding:4px 2px; text-decoration:underline; text-underline-offset:3px; }
 .tj-link-btn:hover { color: var(--text); }
-.tj-link-danger { color: var(--neg); }
-.tj-reset-confirm { display:flex; gap:10px; }
 
 /* Ticket */
 .tj-ticket {
@@ -1364,11 +1780,99 @@ const css = `
 .tj-hero-value { font-size:42px; font-weight:600; line-height:1; }
 .tj-stat-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; }
 .tj-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; }
-.tj-card-label { color: var(--text-muted); font-size:12px; }
+.tj-card-label { color: var(--text-muted); font-size:12px; display:flex; align-items:center; gap:6px; }
+.tj-card-icon { display:inline-flex; color: var(--mana); opacity:0.85; }
 .tj-card-value { font-size:20px; font-weight:600; }
 
 .tj-section-title { font-size:14px; color: var(--text-muted); margin: 26px 0 10px; font-weight:500; }
 .tj-empty { color: var(--text-muted); font-size:14px; padding: 18px 0; }
+
+/* Date range filter bar */
+.tj-filter-bar {
+  display:flex; align-items:center; flex-wrap:wrap; gap:10px;
+  background: var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:10px 14px; margin-bottom:18px;
+}
+.tj-filter-icon { color: var(--mana); display:flex; align-items:center; flex-shrink:0; }
+.tj-filter-presets { display:flex; gap:6px; flex-wrap:wrap; }
+.tj-filter-chip {
+  background: var(--surface-2); border:1px solid var(--border); color: var(--text-muted);
+  border-radius:999px; padding:5px 11px; font-size:12px; font-weight:500; cursor:pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.tj-filter-chip:hover { color: var(--text); }
+.tj-filter-chip.active { color: var(--text); border-color: var(--mana); background: rgba(124,108,255,0.12); }
+.tj-filter-date { display:flex; align-items:center; gap:6px; font-size:12px; color: var(--text-muted); }
+.tj-filter-date input {
+  background: var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:6px 8px;
+  color: var(--text); font-size:12.5px; font-family:'IBM Plex Mono', monospace;
+}
+.tj-filter-date input:focus { border-color: var(--mana); outline:none; }
+.tj-filter-clear {
+  display:flex; align-items:center; gap:4px; background:none; border:1px solid var(--border);
+  color: var(--neg); border-radius:8px; padding:5px 10px; font-size:12px; cursor:pointer;
+}
+.tj-filter-clear:hover { border-color: var(--neg); }
+.tj-filter-count { margin-left:auto; color: var(--text-muted); font-size:12px; white-space:nowrap; }
+
+/* Rank / level card */
+.tj-rank-card {
+  display:flex; align-items:center; gap:18px; background: var(--surface); border:1px solid var(--border);
+  border-radius:14px; padding:16px 18px; margin-bottom:20px; position:relative; overflow:hidden;
+}
+.tj-rank-card::before {
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background: radial-gradient(140% 100% at 0% 0%, rgba(124,108,255,0.10), transparent 55%);
+}
+.tj-rank-emblem { position:relative; width:64px; height:64px; flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+.tj-rank-ring { position:absolute; inset:0; width:100%; height:100%; animation: tjRotateCW 40s linear infinite; }
+.tj-rank-ring-2 { animation: tjRotateCCW 32s linear infinite; }
+.tj-rank-crystal {
+  width:40px; height:40px; border-radius:11px; transform:rotate(45deg);
+  background: linear-gradient(135deg, var(--accent), var(--mana));
+  display:flex; align-items:center; justify-content:center;
+  animation: tjCrystalPulse 3.4s ease-in-out infinite;
+}
+@keyframes tjCrystalPulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(124,108,255,0.35); }
+  50% { box-shadow: 0 0 22px rgba(124,108,255,0.55); }
+}
+.tj-rank-level { transform:rotate(-45deg); color:#12141A; font-weight:700; font-size:15px; }
+.tj-rank-emblem-fire .tj-rank-crystal { animation-name: tjCrystalPulseFire; }
+@keyframes tjCrystalPulseFire {
+  0%, 100% { box-shadow: 0 0 16px rgba(232,163,61,0.5); }
+  50% { box-shadow: 0 0 26px rgba(232,163,61,0.75); }
+}
+.tj-rank-flame { position:absolute; top:-4px; right:-2px; color: var(--long); filter: drop-shadow(0 0 4px rgba(232,163,61,0.7)); animation: tjFlicker 1.4s ease-in-out infinite; }
+@keyframes tjFlicker { 0%, 100% { transform: scale(1) rotate(-4deg); } 50% { transform: scale(1.12) rotate(4deg); } }
+
+.tj-rank-info { display:flex; flex-direction:column; gap:6px; min-width:0; flex:1; position:relative; }
+.tj-rank-toptext { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+.tj-rank-title { font-size:16px; font-weight:700; }
+.tj-rank-lvl-tag { font-size:11px; color: var(--mana); letter-spacing:0.04em; }
+.tj-xp-track { width:100%; height:6px; border-radius:999px; background: var(--surface-2); overflow:hidden; }
+.tj-xp-fill {
+  height:100%; border-radius:999px; background: linear-gradient(90deg, var(--mana), var(--accent));
+  transition: width .5s ease; box-shadow: 0 0 8px rgba(124,108,255,0.5);
+}
+.tj-rank-sub { font-size:11.5px; color: var(--text-muted); }
+.tj-rank-filtered-tag { color: var(--mana); }
+.tj-rank-streak { display:flex; align-items:center; gap:6px; font-size:12px; color: var(--text-muted); }
+.tj-rank-streak svg { color: var(--text-muted); }
+.tj-rank-streak.pos { color: var(--pos); }
+.tj-rank-streak.pos svg { color: var(--long); }
+.tj-rank-streak.neg { color: var(--neg); }
+.tj-rank-streak.neg svg { color: var(--neg); }
+
+/* Insight + highlight cards */
+.tj-insight-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.tj-highlight-card { gap:6px; }
+.tj-highlight-meta { color: var(--text-muted); font-size:11px; text-transform:capitalize; }
+
+@media (max-width: 640px) {
+  .tj-rank-card { flex-direction:column; align-items:flex-start; gap:14px; }
+  .tj-filter-count { margin-left:0; width:100%; }
+}
 
 /* Table */
 .tj-table { width:100%; border-collapse: collapse; font-size:13px; }
