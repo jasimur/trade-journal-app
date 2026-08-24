@@ -21,15 +21,54 @@ import {
   TrendingDown,
   Calendar,
   Sparkles,
+  ImagePlus,
+  Link2,
+  Loader2,
 } from "lucide-react";
 
 const STORAGE_KEY = "trades";
 const DEFAULT_COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE"];
 
+// ---- Setup / confirmation taxonomy (optional fields on every trade) ----
+const LEVEL_TYPES = [
+  "PDH / PDL",
+  "VAH / VAL",
+  "VPOC",
+  "Swing High/Low",
+  "VWAP",
+  "Liquidity High/Low",
+  "Other",
+];
+const CONFIRMATION_TAGS = [
+  { id: "absorption", label: "Absorption" },
+  { id: "exhaustion", label: "Exhaustion / Fading" },
+  { id: "divergence", label: "Delta Divergence" },
+  { id: "imbalance", label: "Opposite Imbalance" },
+  { id: "sweep", label: "Sweep + Reclaim" },
+  { id: "bos", label: "Micro BOS" },
+  { id: "retest", label: "Retest Hold" },
+];
+const ENTRY_MODELS = [
+  { id: "aggressive", label: "Aggressive" },
+  { id: "balanced", label: "Balanced" },
+  { id: "conservative", label: "Conservative" },
+];
+const FOLLOWTHROUGH_OPTIONS = [
+  { id: "yes", label: "Yes" },
+  { id: "partial", label: "Partial" },
+  { id: "no", label: "No" },
+];
+const CONFIRMATION_LABELS = Object.fromEntries(CONFIRMATION_TAGS.map((t) => [t.id, t.label]));
+const ENTRY_MODEL_LABELS = Object.fromEntries(ENTRY_MODELS.map((m) => [m.id, m.label]));
+
 function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
-import { auth, db } from "./firebase";
+function fileExt(name) {
+  const m = /\.([a-zA-Z0-9]+)$/.exec(name || "");
+  return m ? m[1].toLowerCase() : "png";
+}
+import { auth, db, storage } from "./firebase";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -42,6 +81,12 @@ import {
   getDocs,
   setDoc,
 } from "firebase/firestore";
+import {
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+} from "firebase/storage";
 
 function nowLocalInput() {
   const d = new Date();
@@ -145,6 +190,13 @@ const emptyForm = () => ({
   margin: "",
   pnl: "",
   note: "",
+  levelType: "",
+  approach: "",
+  entryModel: "",
+  followThrough: "",
+  confirmations: [],
+  proofLink: "",
+  screenshotUrl: "",
 });
 
 export default function TradeJournal() {
@@ -162,6 +214,9 @@ export default function TradeJournal() {
   const [formError, setFormError] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [dateRange, setDateRange] = useState({ start: "", end: "", preset: "all" });
+  const [screenshotFile, setScreenshotFile] = useState(null);
+  const [screenshotPreview, setScreenshotPreview] = useState("");
+  const [uploadingShot, setUploadingShot] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -249,7 +304,28 @@ export default function TradeJournal() {
     }
   }
 
-  function handleSubmit(e) {
+  function handleScreenshotChange(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setScreenshotFile(file);
+    setScreenshotPreview(URL.createObjectURL(file));
+    setFormError("");
+  }
+
+  async function removeScreenshot() {
+    if (form.screenshotUrl) {
+      try {
+        await deleteObject(storageRef(storage, form.screenshotUrl));
+      } catch (e) {
+        // best-effort — file may already be gone, or URL wasn't a storage ref
+      }
+    }
+    setScreenshotFile(null);
+    setScreenshotPreview("");
+    setForm((f) => ({ ...f, screenshotUrl: "" }));
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
     const coin = form.coin.trim().toUpperCase();
     if (!coin || !form.datetime || form.entry === "" || form.exit === "" || form.margin === "" || form.pnl === "") {
@@ -264,8 +340,28 @@ export default function TradeJournal() {
       setFormError("Price, margin and PNL need to be numbers.");
       return;
     }
+
+    const tradeId = editingId || uid();
+    let screenshotUrl = form.screenshotUrl;
+
+    if (screenshotFile) {
+      setUploadingShot(true);
+      try {
+        const path = `trade-screenshots/${user.uid}/${tradeId}.${fileExt(screenshotFile.name)}`;
+        const fileRef = storageRef(storage, path);
+        await uploadBytes(fileRef, screenshotFile);
+        screenshotUrl = await getDownloadURL(fileRef);
+      } catch (e) {
+        console.error("Screenshot upload failed", e);
+        setUploadingShot(false);
+        setFormError("Screenshot upload failed. Check Firebase Storage setup and try again.");
+        return;
+      }
+      setUploadingShot(false);
+    }
+
     const tradeObj = {
-      id: editingId || uid(),
+      id: tradeId,
       datetime: form.datetime,
       coin,
       direction: form.direction,
@@ -274,6 +370,13 @@ export default function TradeJournal() {
       margin: marginNum,
       pnl: pnlNum,
       note: form.note.trim(),
+      levelType: form.levelType,
+      approach: form.approach,
+      entryModel: form.entryModel,
+      followThrough: form.followThrough,
+      confirmations: form.confirmations,
+      proofLink: form.proofLink.trim(),
+      screenshotUrl,
     };
     const next = editingId
       ? trades.map((t) => (t.id === editingId ? tradeObj : t))
@@ -281,6 +384,8 @@ export default function TradeJournal() {
     persist(next);
     setEditingId(null);
     setForm(emptyForm());
+    setScreenshotFile(null);
+    setScreenshotPreview("");
     setFormError("");
   }
 
@@ -294,7 +399,16 @@ export default function TradeJournal() {
       margin: String(t.margin),
       pnl: String(t.pnl),
       note: t.note || "",
+      levelType: t.levelType || "",
+      approach: t.approach || "",
+      entryModel: t.entryModel || "",
+      followThrough: t.followThrough || "",
+      confirmations: Array.isArray(t.confirmations) ? t.confirmations : [],
+      proofLink: t.proofLink || "",
+      screenshotUrl: t.screenshotUrl || "",
     });
+    setScreenshotFile(null);
+    setScreenshotPreview(t.screenshotUrl || "");
     setEditingId(t.id);
     setFormError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -303,20 +417,40 @@ export default function TradeJournal() {
   function cancelEdit() {
     setEditingId(null);
     setForm(emptyForm());
+    setScreenshotFile(null);
+    setScreenshotPreview("");
     setFormError("");
+  }
+
+  function toggleConfirmation(id) {
+    setForm((f) => ({
+      ...f,
+      confirmations: f.confirmations.includes(id)
+        ? f.confirmations.filter((x) => x !== id)
+        : [...f.confirmations, id],
+    }));
+  }
+
+  function toggleSingle(field, value) {
+    setForm((f) => ({ ...f, [field]: f[field] === value ? "" : value }));
   }
 
   function requestDelete(id) {
     setPendingDeleteId(id);
   }
   function confirmDelete(id) {
+    const target = trades.find((t) => t.id === id);
     persist(trades.filter((t) => t.id !== id));
+    if (target && target.screenshotUrl) {
+      deleteObject(storageRef(storage, target.screenshotUrl)).catch(() => {});
+    }
     if (editingId === id) cancelEdit();
     setPendingDeleteId(null);
   }
   function cancelDelete() {
     setPendingDeleteId(null);
   }
+
 
   const stats = useMemo(() => {
     const total = trades.length;
@@ -533,6 +667,60 @@ export default function TradeJournal() {
     return { long: build("long"), short: build("short") };
   }, [filteredTrades]);
 
+  const confirmationTagStats = useMemo(() => {
+    const build = (predicate) => {
+      const list = filteredTrades.filter(predicate);
+      const total = list.length;
+      const pnl = list.reduce((s, t) => s + t.pnl, 0);
+      const wins = list.filter((t) => t.pnl > 0).length;
+      const winRate = total ? (wins / total) * 100 : 0;
+      return { total, pnl, winRate };
+    };
+    const perTag = CONFIRMATION_TAGS.map((tag) => ({
+      id: tag.id,
+      label: tag.label,
+      ...build((t) => Array.isArray(t.confirmations) && t.confirmations.includes(tag.id)),
+    }));
+    const untagged = build((t) => !t.confirmations || t.confirmations.length === 0);
+    return { perTag, untagged };
+  }, [filteredTrades]);
+
+  const approachStats = useMemo(() => {
+    const build = (val) => {
+      const list = filteredTrades.filter((t) => t.approach === val);
+      const total = list.length;
+      const pnl = list.reduce((s, t) => s + t.pnl, 0);
+      const wins = list.filter((t) => t.pnl > 0).length;
+      const winRate = total ? (wins / total) * 100 : 0;
+      return { total, pnl, winRate };
+    };
+    return { strong: build("strong"), weak: build("weak") };
+  }, [filteredTrades]);
+
+  const entryModelStats = useMemo(() => {
+    const build = (val) => {
+      const list = filteredTrades.filter((t) => t.entryModel === val);
+      const total = list.length;
+      const pnl = list.reduce((s, t) => s + t.pnl, 0);
+      const wins = list.filter((t) => t.pnl > 0).length;
+      const winRate = total ? (wins / total) * 100 : 0;
+      return { total, pnl, winRate };
+    };
+    return ENTRY_MODELS.map((m) => ({ id: m.id, label: m.label, ...build(m.id) }));
+  }, [filteredTrades]);
+
+  const followThroughStats = useMemo(() => {
+    const build = (val) => {
+      const list = filteredTrades.filter((t) => t.followThrough === val);
+      const total = list.length;
+      const pnl = list.reduce((s, t) => s + t.pnl, 0);
+      const wins = list.filter((t) => t.pnl > 0).length;
+      const winRate = total ? (wins / total) * 100 : 0;
+      return { total, pnl, winRate };
+    };
+    return FOLLOWTHROUGH_OPTIONS.map((f) => ({ id: f.id, label: f.label, ...build(f.id) }));
+  }, [filteredTrades]);
+
   const chartData = useMemo(() => {
     const sorted = [...filteredTrades].sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
     let running = 0;
@@ -570,6 +758,7 @@ export default function TradeJournal() {
     { id: "weekly", label: "Weekly" },
     { id: "coins", label: "Coins" },
     { id: "longshort", label: "Long / Short" },
+    { id: "confirm", label: "Confirmations" },
     { id: "chart", label: "Chart" },
     { id: "log", label: "Log" },
   ];
@@ -920,11 +1109,144 @@ export default function TradeJournal() {
             </span>
             <input
               type="text"
-              placeholder="Reason for the trade"
+              placeholder="Reason for the trade, or anything extra that happened"
               value={form.note}
               onChange={(e) => setForm({ ...form, note: e.target.value })}
             />
           </label>
+        </div>
+
+        <div className="tj-setup-block">
+          <span className="tj-setup-label">
+            Setup &amp; confirmation <em className="tj-optional">optional</em>
+          </span>
+          <div className="tj-setup-grid">
+            <label className="tj-field">
+              <span>Level type</span>
+              <select
+                value={form.levelType}
+                onChange={(e) => setForm({ ...form, levelType: e.target.value })}
+              >
+                <option value="">—</option>
+                {LEVEL_TYPES.map((lt) => (
+                  <option key={lt} value={lt}>{lt}</option>
+                ))}
+              </select>
+            </label>
+
+            <div className="tj-field">
+              <span>Approach</span>
+              <div className="tj-opt-toggle">
+                <button
+                  type="button"
+                  className={`tj-opt-btn ${form.approach === "strong" ? "active" : ""}`}
+                  onClick={() => toggleSingle("approach", "strong")}
+                >
+                  Strong
+                </button>
+                <button
+                  type="button"
+                  className={`tj-opt-btn ${form.approach === "weak" ? "active" : ""}`}
+                  onClick={() => toggleSingle("approach", "weak")}
+                >
+                  Weak
+                </button>
+              </div>
+            </div>
+
+            <div className="tj-field">
+              <span>Entry model</span>
+              <div className="tj-opt-toggle">
+                {ENTRY_MODELS.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`tj-opt-btn ${form.entryModel === m.id ? "active" : ""}`}
+                    onClick={() => toggleSingle("entryModel", m.id)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="tj-field">
+              <span>Follow-through</span>
+              <div className="tj-opt-toggle">
+                {FOLLOWTHROUGH_OPTIONS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`tj-opt-btn ${form.followThrough === f.id ? "active" : ""}`}
+                    onClick={() => toggleSingle("followThrough", f.id)}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <span className="tj-setup-sublabel">Confirmation checklist — tap what you saw</span>
+          <div className="tj-confirm-chips">
+            {CONFIRMATION_TAGS.map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                className={`tj-chip-btn ${form.confirmations.includes(tag.id) ? "active" : ""}`}
+                onClick={() => toggleConfirmation(tag.id)}
+              >
+                {tag.label}
+              </button>
+            ))}
+          </div>
+
+          <span className="tj-setup-sublabel">
+            Proof <em className="tj-optional">optional</em>
+          </span>
+          <div className="tj-proof-row">
+            <label className="tj-field tj-field-prooflink">
+              <span>Screenshot link</span>
+              <div className="tj-input-icon-wrap">
+                <Link2 size={14} strokeWidth={2.2} />
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={form.proofLink}
+                  onChange={(e) => setForm({ ...form, proofLink: e.target.value })}
+                />
+              </div>
+            </label>
+
+            <div className="tj-field tj-field-shot">
+              <span>Screenshot upload (saved to Firebase)</span>
+              {screenshotPreview ? (
+                <div className="tj-shot-preview">
+                  <img src={screenshotPreview} alt="Trade screenshot" />
+                  {uploadingShot ? (
+                    <div className="tj-shot-uploading">
+                      <Loader2 size={16} className="tj-spin" />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="tj-shot-remove"
+                      onClick={removeScreenshot}
+                      aria-label="Remove screenshot"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <label className="tj-shot-upload">
+                  <ImagePlus size={16} strokeWidth={2.2} />
+                  <span>Choose image</span>
+                  <input type="file" accept="image/*" onChange={handleScreenshotChange} hidden />
+                </label>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="tj-ticket-actions">
@@ -934,8 +1256,8 @@ export default function TradeJournal() {
               Cancel
             </button>
           )}
-          <button type="submit" className="tj-btn-primary">
-            {editingId ? "Update trade" : "Log trade"}
+          <button type="submit" className="tj-btn-primary" disabled={uploadingShot}>
+            {uploadingShot ? "Uploading…" : editingId ? "Update trade" : "Log trade"}
           </button>
         </div>
       </form>
@@ -1029,6 +1351,14 @@ export default function TradeJournal() {
         )}
         {activeTab === "coins" && <CoinsView coins={coinStats} />}
         {activeTab === "longshort" && <LongShortView data={directionStats} />}
+        {activeTab === "confirm" && (
+          <ConfirmationView
+            tagStats={confirmationTagStats}
+            approachStats={approachStats}
+            entryModelStats={entryModelStats}
+            followThroughStats={followThroughStats}
+          />
+        )}
         {activeTab === "chart" && <ChartView data={chartData} />}
         {activeTab === "log" && (
           <LogView
@@ -1426,10 +1756,120 @@ function LogView({ trades, onEdit, onDelete, pendingDeleteId, onConfirmDelete, o
                 )}
               </span>
             </div>
+            {(t.levelType || t.approach || t.entryModel || t.followThrough || t.proofLink || (t.confirmations && t.confirmations.length > 0)) && (
+              <div className="tj-log-tags">
+                {t.levelType && <span className="tj-tag tj-tag-level">{t.levelType}</span>}
+                {t.approach && (
+                  <span className={`tj-tag tj-tag-approach-${t.approach}`}>
+                    {t.approach === "strong" ? "Strong approach" : "Weak approach"}
+                  </span>
+                )}
+                {t.entryModel && (
+                  <span className="tj-tag tj-tag-model">{ENTRY_MODEL_LABELS[t.entryModel] || t.entryModel} entry</span>
+                )}
+                {(t.confirmations || []).map((cid) => (
+                  <span key={cid} className="tj-tag tj-tag-confirm">{CONFIRMATION_LABELS[cid] || cid}</span>
+                ))}
+                {t.followThrough && (
+                  <span className={`tj-tag tj-tag-follow-${t.followThrough}`}>Follow-through: {t.followThrough}</span>
+                )}
+                {t.proofLink && (
+                  <a className="tj-tag tj-tag-link" href={t.proofLink} target="_blank" rel="noopener noreferrer">
+                    <Link2 size={11} strokeWidth={2.2} style={{ display: "inline", verticalAlign: "-1px", marginRight: 3 }} />
+                    Proof link
+                  </a>
+                )}
+              </div>
+            )}
+            {t.screenshotUrl && (
+              <a href={t.screenshotUrl} target="_blank" rel="noopener noreferrer">
+                <img src={t.screenshotUrl} alt="Trade screenshot" className="tj-log-shot" />
+              </a>
+            )}
             {t.note && <div className="tj-log-note">{t.note}</div>}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ConfirmationView({ tagStats, approachStats, entryModelStats, followThroughStats }) {
+  const anyTagData = tagStats.perTag.some((t) => t.total > 0) || tagStats.untagged.total > 0;
+  if (!anyTagData) {
+    return (
+      <EmptyState text="Log a few trades with the confirmation checklist ticked to see a win-rate breakdown here." />
+    );
+  }
+
+  const Row = ({ label, s }) => (
+    <tr>
+      <td>{label}</td>
+      <td className="tj-mono">{s.total}</td>
+      <td className="tj-mono">{fmtPct(s.winRate)}</td>
+      <td className={`tj-mono ${s.pnl > 0 ? "pos" : s.pnl < 0 ? "neg" : ""}`}>{fmtMoney(s.pnl)}</td>
+    </tr>
+  );
+
+  const hasApproach = approachStats.strong.total + approachStats.weak.total > 0;
+  const hasEntryModel = entryModelStats.some((m) => m.total > 0);
+  const hasFollowThrough = followThroughStats.some((f) => f.total > 0);
+
+  return (
+    <div>
+      <h3 className="tj-section-title">By confirmation tag</h3>
+      <table className="tj-table">
+        <thead>
+          <tr><th>Tag</th><th>Trades</th><th>Win rate</th><th>PNL</th></tr>
+        </thead>
+        <tbody>
+          {tagStats.perTag.filter((t) => t.total > 0).map((t) => (
+            <Row key={t.id} label={t.label} s={t} />
+          ))}
+          {tagStats.untagged.total > 0 && <Row label="No tag logged" s={tagStats.untagged} />}
+        </tbody>
+      </table>
+
+      <h3 className="tj-section-title">By approach</h3>
+      {!hasApproach ? (
+        <EmptyState text="No approach logged yet." />
+      ) : (
+        <table className="tj-table">
+          <thead><tr><th>Approach</th><th>Trades</th><th>Win rate</th><th>PNL</th></tr></thead>
+          <tbody>
+            {approachStats.strong.total > 0 && <Row label="Strong" s={approachStats.strong} />}
+            {approachStats.weak.total > 0 && <Row label="Weak" s={approachStats.weak} />}
+          </tbody>
+        </table>
+      )}
+
+      <h3 className="tj-section-title">By entry model</h3>
+      {!hasEntryModel ? (
+        <EmptyState text="No entry model logged yet." />
+      ) : (
+        <table className="tj-table">
+          <thead><tr><th>Model</th><th>Trades</th><th>Win rate</th><th>PNL</th></tr></thead>
+          <tbody>
+            {entryModelStats.filter((m) => m.total > 0).map((m) => (
+              <Row key={m.id} label={m.label} s={m} />
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <h3 className="tj-section-title">By follow-through</h3>
+      {!hasFollowThrough ? (
+        <EmptyState text="No follow-through logged yet." />
+      ) : (
+        <table className="tj-table">
+          <thead><tr><th>Follow-through</th><th>Trades</th><th>Win rate</th><th>PNL</th></tr></thead>
+          <tbody>
+            {followThroughStats.filter((f) => f.total > 0).map((f) => (
+              <Row key={f.id} label={f.label} s={f} />
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -1809,7 +2249,7 @@ const css = `
 }
 .tj-field { display:flex; flex-direction:column; gap:6px; font-size:12px; color: var(--text-muted); }
 .tj-field-note { grid-column: 1 / -1; }
-.tj-field input {
+.tj-field input, .tj-field select {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1819,8 +2259,9 @@ const css = `
   font-family: 'IBM Plex Mono', monospace;
   width: 100%;
 }
+.tj-field select { appearance:none; -webkit-appearance:none; cursor:pointer; }
 .tj-field-note input { font-family: 'Inter', sans-serif; }
-.tj-field input:focus { border-color: var(--accent); outline:none; }
+.tj-field input:focus, .tj-field select:focus { border-color: var(--accent); outline:none; }
 .tj-optional { font-style:normal; color: var(--text-muted); font-size:10px; text-transform:uppercase; letter-spacing:0.05em; margin-left:4px; }
 
 .tj-dir-toggle { display:flex; gap:6px; }
@@ -1831,6 +2272,74 @@ const css = `
 }
 .tj-dir-btn.tj-dir-long.active { background: rgba(232,163,61,0.15); border-color: var(--long); color: var(--long); }
 .tj-dir-btn.tj-dir-short.active { background: rgba(47,184,172,0.15); border-color: var(--short); color: var(--short); }
+
+/* Setup & confirmation block */
+.tj-setup-block { margin-top:18px; padding-top:16px; border-top:1px dashed var(--border); }
+.tj-setup-label {
+  display:block; font-size:12px; color: var(--mana); text-transform:uppercase;
+  letter-spacing:0.06em; margin-bottom:12px; font-weight:600; font-family:'Space Grotesk', sans-serif;
+}
+.tj-setup-sublabel { display:block; font-size:12px; color: var(--text-muted); margin:14px 0 8px; }
+.tj-setup-grid {
+  display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:14px;
+}
+.tj-opt-toggle { display:flex; gap:6px; flex-wrap:wrap; }
+.tj-opt-btn {
+  flex:1; min-width:70px; padding:9px 8px; border-radius:8px; border:1px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted); font-size:12.5px; font-weight:600; cursor:pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.tj-opt-btn.active { background: rgba(124,108,255,0.16); border-color: var(--mana); color: var(--mana); }
+.tj-confirm-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.tj-chip-btn {
+  padding:8px 13px; border-radius:20px; border:1px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted); font-size:12.5px; cursor:pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.tj-chip-btn.active { background: rgba(232,163,61,0.15); border-color: var(--accent); color: var(--accent); }
+
+/* Proof: screenshot link + upload */
+.tj-proof-row { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:14px; }
+.tj-input-icon-wrap { position:relative; display:flex; align-items:center; }
+.tj-input-icon-wrap svg { position:absolute; left:10px; color: var(--text-muted); pointer-events:none; }
+.tj-input-icon-wrap input { padding-left:32px; }
+.tj-shot-upload {
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  border:1.5px dashed var(--border); border-radius:8px; padding:12px; cursor:pointer;
+  color: var(--text-muted); font-size:13px; transition: border-color .15s, color .15s;
+  min-height:44px;
+}
+.tj-shot-upload:hover { border-color: var(--mana); color: var(--mana); }
+.tj-shot-preview { position:relative; width:100%; max-width:220px; border-radius:8px; overflow:hidden; border:1px solid var(--border); }
+.tj-shot-preview img { display:block; width:100%; height:96px; object-fit:cover; }
+.tj-shot-remove {
+  position:absolute; top:5px; right:5px; background:rgba(18,20,26,0.75); border:none; color:#fff;
+  width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer;
+}
+.tj-shot-remove:hover { background:rgba(242,84,91,0.85); }
+.tj-shot-uploading { position:absolute; inset:0; background:rgba(18,20,26,0.6); display:flex; align-items:center; justify-content:center; color:#fff; }
+.tj-spin { animation: tjSpin 0.9s linear infinite; }
+@keyframes tjSpin { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+@media (max-width: 520px) {
+  .tj-proof-row { grid-template-columns: 1fr; }
+}
+
+/* Log row tags */
+.tj-log-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); }
+.tj-tag { font-size:11px; padding:3px 9px; border-radius:20px; background: var(--surface-2); border:1px solid var(--border); color: var(--text-muted); }
+.tj-tag-confirm { color: var(--accent); border-color: rgba(232,163,61,0.35); }
+.tj-tag-approach-strong { color: var(--pos); border-color: rgba(62,207,142,0.35); }
+.tj-tag-approach-weak { color: var(--neg); border-color: rgba(242,84,91,0.35); }
+.tj-tag-model { color: var(--mana); border-color: rgba(124,108,255,0.35); }
+.tj-tag-follow-yes { color: var(--pos); border-color: rgba(62,207,142,0.35); }
+.tj-tag-follow-no { color: var(--neg); border-color: rgba(242,84,91,0.35); }
+.tj-tag-follow-partial { color: var(--accent); border-color: rgba(232,163,61,0.35); }
+.tj-tag-link { color: var(--mana); border-color: rgba(124,108,255,0.35); cursor:pointer; text-decoration:none; }
+.tj-log-shot { display:block; width:72px; height:52px; border-radius:6px; object-fit:cover; border:1px solid var(--border); margin-top:8px; cursor:pointer; }
+
+@media (max-width: 480px) {
+  .tj-opt-btn { min-width:60px; }
+}
 
 .tj-field-roi { justify-content:flex-end; }
 .tj-roi-preview { font-size:16px; font-weight:600; padding:9px 0; }
