@@ -24,42 +24,25 @@ import {
   ImagePlus,
   Link2,
   Loader2,
+  Star,
 } from "lucide-react";
 
 const STORAGE_KEY = "trades";
 const DEFAULT_COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE"];
 
-// ---- Setup / confirmation taxonomy (optional fields on every trade) ----
-const LEVEL_TYPES = [
-  "PDH / PDL",
-  "VAH / VAL",
-  "VPOC",
-  "Swing High/Low",
-  "VWAP",
-  "Liquidity High/Low",
-  "Other",
-];
-const CONFIRMATION_TAGS = [
-  { id: "absorption", label: "Absorption" },
-  { id: "exhaustion", label: "Exhaustion / Fading" },
-  { id: "divergence", label: "Delta Divergence" },
-  { id: "imbalance", label: "Opposite Imbalance" },
-  { id: "sweep", label: "Sweep + Reclaim" },
-  { id: "bos", label: "Micro BOS" },
-  { id: "retest", label: "Retest Hold" },
-];
+// ---- Setup taxonomy (optional fields on every trade) ----
 const ENTRY_MODELS = [
   { id: "aggressive", label: "Aggressive" },
   { id: "balanced", label: "Balanced" },
   { id: "conservative", label: "Conservative" },
 ];
-const FOLLOWTHROUGH_OPTIONS = [
-  { id: "yes", label: "Yes" },
-  { id: "partial", label: "Partial" },
-  { id: "no", label: "No" },
-];
-const CONFIRMATION_LABELS = Object.fromEntries(CONFIRMATION_TAGS.map((t) => [t.id, t.label]));
 const ENTRY_MODEL_LABELS = Object.fromEntries(ENTRY_MODELS.map((m) => [m.id, m.label]));
+const SOURCE_OPTIONS = [
+  { id: "binance-killer", label: "Binance Killer" },
+  { id: "gg-short", label: "GG-Short" },
+  { id: "others", label: "Others" },
+];
+const SOURCE_LABELS = Object.fromEntries(SOURCE_OPTIONS.map((s) => [s.id, s.label]));
 
 function uid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -94,6 +77,14 @@ function nowLocalInput() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
     d.getHours()
   )}:${pad(d.getMinutes())}`;
+}
+
+function nowUTC6Input() {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const d = new Date(utcMs + 6 * 60 * 60000);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function fmtMoney(n) {
@@ -181,6 +172,82 @@ function getTraderRank(totalTrades) {
   return { level, title, xpProgress, tradesToNext };
 }
 
+function ticketMoodFor(form) {
+  const pnlNum = form.pnl === "" ? null : parseFloat(form.pnl);
+  if (pnlNum !== null && !Number.isNaN(pnlNum)) {
+    if (pnlNum > 0) {
+      const lines = [
+        "Nice! Mana's flowing your way.",
+        "That's the good kind of green.",
+        "Book it — that's a win.",
+      ];
+      return { state: "happy", line: lines[Math.abs(Math.round(pnlNum)) % lines.length] };
+    }
+    if (pnlNum < 0) {
+      const lines = [
+        "Log it anyway — that's how you level up.",
+        "Ouch. Still worth writing down.",
+        "Every guild member takes a hit sometime.",
+      ];
+      return { state: "sad", line: lines[Math.abs(Math.round(pnlNum)) % lines.length] };
+    }
+  }
+  if (form.approach === "weak") {
+    return { state: "sad", line: "Weak approach, huh? Stay sharp out there." };
+  }
+  if (form.approach === "strong") {
+    return { state: "happy", line: "Strong approach — that's the way." };
+  }
+  if (form.coin) {
+    return { state: "idle", line: `${form.direction === "long" ? "Long" : "Short"} ${form.coin}? Let's see it.` };
+  }
+  return { state: "idle", line: "Ready when you are, trader." };
+}
+
+function TicketMascot({ mood, line, celebrating }) {
+  const moodClass = celebrating || mood === "happy" ? "tj-auth-slime-cheer" : mood === "sad" ? "tj-auth-slime-sad" : "";
+  return (
+    <div className="tj-ticket-mascot">
+      <div className={`tj-ticket-slime ${moodClass}`} aria-hidden="true">
+        <svg viewBox="0 0 120 96">
+          <ellipse className="tj-slime-shadow" cx="60" cy="90" rx="34" ry="5" />
+          <path
+            className="tj-slime-body"
+            d="M60,10 C82,10 100,32 100,54 C100,76 82,90 60,90 C38,90 20,76 20,54 C20,32 38,10 60,10 Z"
+          />
+          <ellipse className="tj-slime-shine" cx="42" cy="34" rx="9" ry="6" />
+          <g className="tj-slime-eyes">
+            <ellipse cx="48" cy="52" rx="4" ry="5.5" fill="#12141A" />
+            <ellipse cx="74" cy="52" rx="4" ry="5.5" fill="#12141A" />
+          </g>
+          <path className="tj-slime-mouth" d="M52,64 Q61,70 70,64" stroke="#12141A" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+          <ellipse cx="40" cy="60" rx="4.5" ry="3" className="tj-slime-blush" />
+          <ellipse cx="82" cy="60" rx="4.5" ry="3" className="tj-slime-blush" />
+        </svg>
+      </div>
+      <div className="tj-ticket-speech">{line}</div>
+    </div>
+  );
+}
+
+function ConfettiBurst() {
+  const pieces = Array.from({ length: 12 }).map((_, i) => {
+    const angle = (360 / 12) * i + (Math.random() * 20 - 10);
+    const dist = 55 + Math.random() * 40;
+    const dx = Math.cos((angle * Math.PI) / 180) * dist;
+    const dy = Math.sin((angle * Math.PI) / 180) * dist;
+    const colors = ["var(--pos)", "var(--accent)", "var(--mana)", "var(--short)"];
+    return (
+      <span
+        key={i}
+        className="tj-confetti-piece"
+        style={{ "--dx": `${dx}px`, "--dy": `${dy}px`, background: colors[i % colors.length], animationDelay: `${i * 0.02}s` }}
+      />
+    );
+  });
+  return <div className="tj-confetti-burst">{pieces}</div>;
+}
+
 const emptyForm = () => ({
   datetime: nowLocalInput(),
   coin: "",
@@ -190,17 +257,25 @@ const emptyForm = () => ({
   margin: "",
   pnl: "",
   note: "",
-  levelType: "",
+  noteImportant: false,
   approach: "",
   entryModel: "",
-  followThrough: "",
-  confirmations: [],
   proofLink: "",
   screenshotUrl: "",
+  source: "",
+  sourceOther: "",
+});
+
+const emptyPlanForm = () => ({
+  datetime: nowUTC6Input(),
+  coin: "",
+  direction: "long",
+  note: "",
 });
 
 export default function TradeJournal() {
   const [trades, setTrades] = useState([]);
+  const [plans, setPlans] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -217,6 +292,11 @@ export default function TradeJournal() {
   const [screenshotFile, setScreenshotFile] = useState(null);
   const [screenshotPreview, setScreenshotPreview] = useState("");
   const [uploadingShot, setUploadingShot] = useState(false);
+  const [celebration, setCelebration] = useState({ show: false, xp: 0, kind: "" });
+  const [planForm, setPlanForm] = useState(emptyPlanForm());
+  const [editingPlanId, setEditingPlanId] = useState(null);
+  const [planFormError, setPlanFormError] = useState("");
+  const [pendingDeletePlanId, setPendingDeletePlanId] = useState(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -224,6 +304,7 @@ export default function TradeJournal() {
       setAuthReady(true);
       setLoaded(false);
       setTrades([]);
+      setPlans([]);
     });
     return unsubscribe;
   }, []);
@@ -237,17 +318,28 @@ export default function TradeJournal() {
     let cancelled = false;
     (async () => {
       try {
-        const snapshot = await getDocs(
-          collection(db, "users", user.uid, "trades")
-        );
-        const loadedTrades = snapshot.docs.map((item) => ({
+        const [tradesSnap, plansSnap] = await Promise.all([
+          getDocs(collection(db, "users", user.uid, "trades")),
+          getDocs(collection(db, "users", user.uid, "plans")),
+        ]);
+        const loadedTrades = tradesSnap.docs.map((item) => ({
           id: item.id,
           ...item.data(),
         }));
         loadedTrades.sort(
           (a, b) => new Date(b.datetime) - new Date(a.datetime)
         );
-        if (!cancelled) setTrades(loadedTrades);
+        const loadedPlans = plansSnap.docs.map((item) => ({
+          id: item.id,
+          ...item.data(),
+        }));
+        loadedPlans.sort(
+          (a, b) => new Date(b.datetime) - new Date(a.datetime)
+        );
+        if (!cancelled) {
+          setTrades(loadedTrades);
+          setPlans(loadedPlans);
+        }
       } catch (e) {
         console.error("Failed to load journal", e);
       } finally {
@@ -283,6 +375,32 @@ export default function TradeJournal() {
     } catch (e) {
       console.error("Failed to save journal", e);
       setFormError("Could not save to Firebase. Please try again.");
+    }
+  }
+
+  async function persistPlans(next) {
+    if (!user) return;
+    setPlans(next);
+    try {
+      const existing = new Set(next.map((plan) => plan.id));
+      const snapshot = await getDocs(
+        collection(db, "users", user.uid, "plans")
+      );
+
+      await Promise.all(
+        snapshot.docs
+          .filter((item) => !existing.has(item.id))
+          .map((item) => deleteDoc(item.ref))
+      );
+
+      await Promise.all(
+        next.map((plan) =>
+          setDoc(doc(db, "users", user.uid, "plans", plan.id), plan)
+        )
+      );
+    } catch (e) {
+      console.error("Failed to save plans", e);
+      setPlanFormError("Could not save to Firebase. Please try again.");
     }
   }
 
@@ -370,14 +488,16 @@ export default function TradeJournal() {
       margin: marginNum,
       pnl: pnlNum,
       note: form.note.trim(),
-      levelType: form.levelType,
+      noteImportant: form.note.trim() ? form.noteImportant : false,
       approach: form.approach,
       entryModel: form.entryModel,
-      followThrough: form.followThrough,
-      confirmations: form.confirmations,
       proofLink: form.proofLink.trim(),
       screenshotUrl,
+      source: form.source,
+      sourceOther: form.source === "others" ? form.sourceOther.trim() : "",
     };
+    const wasEditing = Boolean(editingId);
+    const xp = 10 + (form.approach ? 2 : 0) + (form.entryModel ? 2 : 0) + (form.source ? 2 : 0) + (form.proofLink.trim() || screenshotUrl ? 3 : 0);
     const next = editingId
       ? trades.map((t) => (t.id === editingId ? tradeObj : t))
       : [...trades, tradeObj];
@@ -387,6 +507,8 @@ export default function TradeJournal() {
     setScreenshotFile(null);
     setScreenshotPreview("");
     setFormError("");
+    setCelebration({ show: true, xp, kind: wasEditing ? "update" : "new" });
+    setTimeout(() => setCelebration({ show: false, xp: 0, kind: "" }), 1600);
   }
 
   function startEdit(t) {
@@ -399,13 +521,13 @@ export default function TradeJournal() {
       margin: String(t.margin),
       pnl: String(t.pnl),
       note: t.note || "",
-      levelType: t.levelType || "",
+      noteImportant: Boolean(t.noteImportant),
       approach: t.approach || "",
       entryModel: t.entryModel || "",
-      followThrough: t.followThrough || "",
-      confirmations: Array.isArray(t.confirmations) ? t.confirmations : [],
       proofLink: t.proofLink || "",
       screenshotUrl: t.screenshotUrl || "",
+      source: t.source || "",
+      sourceOther: t.sourceOther || "",
     });
     setScreenshotFile(null);
     setScreenshotPreview(t.screenshotUrl || "");
@@ -420,15 +542,6 @@ export default function TradeJournal() {
     setScreenshotFile(null);
     setScreenshotPreview("");
     setFormError("");
-  }
-
-  function toggleConfirmation(id) {
-    setForm((f) => ({
-      ...f,
-      confirmations: f.confirmations.includes(id)
-        ? f.confirmations.filter((x) => x !== id)
-        : [...f.confirmations, id],
-    }));
   }
 
   function toggleSingle(field, value) {
@@ -449,6 +562,58 @@ export default function TradeJournal() {
   }
   function cancelDelete() {
     setPendingDeleteId(null);
+  }
+
+  function handlePlanSubmit(e) {
+    e.preventDefault();
+    const coin = planForm.coin.trim().toUpperCase();
+    if (!coin || !planForm.datetime || !planForm.note.trim()) {
+      setPlanFormError("Fill in coin, date & time, and the note to save a plan.");
+      return;
+    }
+    const planObj = {
+      id: editingPlanId || uid(),
+      datetime: planForm.datetime,
+      coin,
+      direction: planForm.direction,
+      note: planForm.note.trim(),
+    };
+    const next = editingPlanId
+      ? plans.map((p) => (p.id === editingPlanId ? planObj : p))
+      : [planObj, ...plans];
+    persistPlans(next);
+    setEditingPlanId(null);
+    setPlanForm(emptyPlanForm());
+    setPlanFormError("");
+  }
+
+  function startEditPlan(p) {
+    setPlanForm({
+      datetime: p.datetime,
+      coin: p.coin,
+      direction: p.direction,
+      note: p.note || "",
+    });
+    setEditingPlanId(p.id);
+    setPlanFormError("");
+  }
+
+  function cancelEditPlan() {
+    setEditingPlanId(null);
+    setPlanForm(emptyPlanForm());
+    setPlanFormError("");
+  }
+
+  function requestDeletePlan(id) {
+    setPendingDeletePlanId(id);
+  }
+  function confirmDeletePlan(id) {
+    persistPlans(plans.filter((p) => p.id !== id));
+    if (editingPlanId === id) cancelEditPlan();
+    setPendingDeletePlanId(null);
+  }
+  function cancelDeletePlan() {
+    setPendingDeletePlanId(null);
   }
 
 
@@ -667,24 +832,6 @@ export default function TradeJournal() {
     return { long: build("long"), short: build("short") };
   }, [filteredTrades]);
 
-  const confirmationTagStats = useMemo(() => {
-    const build = (predicate) => {
-      const list = filteredTrades.filter(predicate);
-      const total = list.length;
-      const pnl = list.reduce((s, t) => s + t.pnl, 0);
-      const wins = list.filter((t) => t.pnl > 0).length;
-      const winRate = total ? (wins / total) * 100 : 0;
-      return { total, pnl, winRate };
-    };
-    const perTag = CONFIRMATION_TAGS.map((tag) => ({
-      id: tag.id,
-      label: tag.label,
-      ...build((t) => Array.isArray(t.confirmations) && t.confirmations.includes(tag.id)),
-    }));
-    const untagged = build((t) => !t.confirmations || t.confirmations.length === 0);
-    return { perTag, untagged };
-  }, [filteredTrades]);
-
   const approachStats = useMemo(() => {
     const build = (val) => {
       const list = filteredTrades.filter((t) => t.approach === val);
@@ -709,16 +856,16 @@ export default function TradeJournal() {
     return ENTRY_MODELS.map((m) => ({ id: m.id, label: m.label, ...build(m.id) }));
   }, [filteredTrades]);
 
-  const followThroughStats = useMemo(() => {
+  const sourceStats = useMemo(() => {
     const build = (val) => {
-      const list = filteredTrades.filter((t) => t.followThrough === val);
+      const list = filteredTrades.filter((t) => t.source === val);
       const total = list.length;
       const pnl = list.reduce((s, t) => s + t.pnl, 0);
       const wins = list.filter((t) => t.pnl > 0).length;
       const winRate = total ? (wins / total) * 100 : 0;
       return { total, pnl, winRate };
     };
-    return FOLLOWTHROUGH_OPTIONS.map((f) => ({ id: f.id, label: f.label, ...build(f.id) }));
+    return SOURCE_OPTIONS.map((s) => ({ id: s.id, label: s.label, ...build(s.id) }));
   }, [filteredTrades]);
 
   const chartData = useMemo(() => {
@@ -758,9 +905,10 @@ export default function TradeJournal() {
     { id: "weekly", label: "Weekly" },
     { id: "coins", label: "Coins" },
     { id: "longshort", label: "Long / Short" },
-    { id: "confirm", label: "Confirmations" },
+    { id: "confirm", label: "Setup Stats" },
     { id: "chart", label: "Chart" },
     { id: "log", label: "Log" },
+    { id: "plans", label: "Entry Plans" },
   ];
 
   if (!authReady) {
@@ -958,6 +1106,8 @@ export default function TradeJournal() {
     );
   }
 
+  const ticketMood = ticketMoodFor(form);
+
   return (
     <div className="tj-app">
       <style>{css}</style>
@@ -981,6 +1131,16 @@ export default function TradeJournal() {
       </header>
 
       <form className="tj-ticket" onSubmit={handleSubmit}>
+        <TicketMascot mood={ticketMood.state} line={ticketMood.line} celebrating={celebration.show} />
+        {celebration.show && (
+          <div className="tj-ticket-celebrate" aria-hidden="true">
+            {celebration.kind === "new" && <ConfettiBurst />}
+            <div className="tj-xp-toast">
+              <Sparkles size={14} strokeWidth={2.4} />
+              {celebration.kind === "new" ? `Trade logged · +${celebration.xp} XP` : "Trade updated"}
+            </div>
+          </div>
+        )}
         <div className="tj-ticket-stub">
           <span className="tj-mono tj-ticket-num">
             {editingId ? "EDITING TICKET" : `№ ${String(stats.total + 1).padStart(4, "0")}`}
@@ -1107,33 +1267,32 @@ export default function TradeJournal() {
             <span>
               Note <em className="tj-optional">optional</em>
             </span>
-            <input
-              type="text"
-              placeholder="Reason for the trade, or anything extra that happened"
-              value={form.note}
-              onChange={(e) => setForm({ ...form, note: e.target.value })}
-            />
+            <div className="tj-note-row">
+              <input
+                type="text"
+                placeholder="Reason for the trade, or anything extra that happened"
+                value={form.note}
+                onChange={(e) => setForm({ ...form, note: e.target.value })}
+              />
+              <button
+                type="button"
+                className={`tj-note-star ${form.noteImportant ? "active" : ""}`}
+                onClick={() => setForm({ ...form, noteImportant: !form.noteImportant })}
+                aria-pressed={form.noteImportant}
+                aria-label="Mark this note as important"
+                title="Mark this note as important"
+              >
+                <Star size={16} strokeWidth={2.2} fill={form.noteImportant ? "currentColor" : "none"} />
+              </button>
+            </div>
           </label>
         </div>
 
         <div className="tj-setup-block">
           <span className="tj-setup-label">
-            Setup &amp; confirmation <em className="tj-optional">optional</em>
+            Setup <em className="tj-optional">optional</em>
           </span>
           <div className="tj-setup-grid">
-            <label className="tj-field">
-              <span>Level type</span>
-              <select
-                value={form.levelType}
-                onChange={(e) => setForm({ ...form, levelType: e.target.value })}
-              >
-                <option value="">—</option>
-                {LEVEL_TYPES.map((lt) => (
-                  <option key={lt} value={lt}>{lt}</option>
-                ))}
-              </select>
-            </label>
-
             <div className="tj-field">
               <span>Approach</span>
               <div className="tj-opt-toggle">
@@ -1171,34 +1330,29 @@ export default function TradeJournal() {
             </div>
 
             <div className="tj-field">
-              <span>Follow-through</span>
+              <span>Source</span>
               <div className="tj-opt-toggle">
-                {FOLLOWTHROUGH_OPTIONS.map((f) => (
+                {SOURCE_OPTIONS.map((s) => (
                   <button
-                    key={f.id}
+                    key={s.id}
                     type="button"
-                    className={`tj-opt-btn ${form.followThrough === f.id ? "active" : ""}`}
-                    onClick={() => toggleSingle("followThrough", f.id)}
+                    className={`tj-opt-btn ${form.source === s.id ? "active" : ""}`}
+                    onClick={() => toggleSingle("source", s.id)}
                   >
-                    {f.label}
+                    {s.label}
                   </button>
                 ))}
               </div>
+              {form.source === "others" && (
+                <input
+                  type="text"
+                  className="tj-source-other"
+                  placeholder="Which source?"
+                  value={form.sourceOther}
+                  onChange={(e) => setForm({ ...form, sourceOther: e.target.value })}
+                />
+              )}
             </div>
-          </div>
-
-          <span className="tj-setup-sublabel">Confirmation checklist — tap what you saw</span>
-          <div className="tj-confirm-chips">
-            {CONFIRMATION_TAGS.map((tag) => (
-              <button
-                key={tag.id}
-                type="button"
-                className={`tj-chip-btn ${form.confirmations.includes(tag.id) ? "active" : ""}`}
-                onClick={() => toggleConfirmation(tag.id)}
-              >
-                {tag.label}
-              </button>
-            ))}
           </div>
 
           <span className="tj-setup-sublabel">
@@ -1353,10 +1507,9 @@ export default function TradeJournal() {
         {activeTab === "longshort" && <LongShortView data={directionStats} />}
         {activeTab === "confirm" && (
           <ConfirmationView
-            tagStats={confirmationTagStats}
             approachStats={approachStats}
             entryModelStats={entryModelStats}
-            followThroughStats={followThroughStats}
+            sourceStats={sourceStats}
           />
         )}
         {activeTab === "chart" && <ChartView data={chartData} />}
@@ -1368,6 +1521,23 @@ export default function TradeJournal() {
             pendingDeleteId={pendingDeleteId}
             onConfirmDelete={confirmDelete}
             onCancelDelete={cancelDelete}
+          />
+        )}
+        {activeTab === "plans" && (
+          <PlansView
+            coinOptions={coinOptions}
+            planForm={planForm}
+            setPlanForm={setPlanForm}
+            editingPlanId={editingPlanId}
+            planFormError={planFormError}
+            onSubmit={handlePlanSubmit}
+            onCancelEdit={cancelEditPlan}
+            plans={plans}
+            onEdit={startEditPlan}
+            onDelete={requestDeletePlan}
+            pendingDeleteId={pendingDeletePlanId}
+            onConfirmDelete={confirmDeletePlan}
+            onCancelDelete={cancelDeletePlan}
           />
         )}
       </main>
@@ -1706,10 +1876,25 @@ function ChartView({ data }) {
 }
 
 function LogView({ trades, onEdit, onDelete, pendingDeleteId, onConfirmDelete, onCancelDelete }) {
+  const [importantOnly, setImportantOnly] = useState(false);
   if (trades.length === 0) return <EmptyState />;
+  const visibleTrades = importantOnly ? trades.filter((t) => t.noteImportant) : trades;
   return (
     <div className="tj-log">
-      {trades.map((t) => {
+      <div className="tj-log-toolbar">
+        <button
+          type="button"
+          className={`tj-important-toggle ${importantOnly ? "active" : ""}`}
+          onClick={() => setImportantOnly((v) => !v)}
+        >
+          <Star size={13} strokeWidth={2.4} fill={importantOnly ? "currentColor" : "none"} />
+          Important notes{importantOnly ? "" : " only"}
+        </button>
+      </div>
+      {visibleTrades.length === 0 ? (
+        <EmptyState text="No important notes marked yet — tap the ⭐ next to Note when logging a trade." />
+      ) : (
+        visibleTrades.map((t) => {
         const roi = t.margin ? (t.pnl / t.margin) * 100 : null;
         return (
           <div key={t.id} className="tj-log-row">
@@ -1756,9 +1941,13 @@ function LogView({ trades, onEdit, onDelete, pendingDeleteId, onConfirmDelete, o
                 )}
               </span>
             </div>
-            {(t.levelType || t.approach || t.entryModel || t.followThrough || t.proofLink || (t.confirmations && t.confirmations.length > 0)) && (
+            {(t.approach || t.entryModel || t.proofLink || t.source) && (
               <div className="tj-log-tags">
-                {t.levelType && <span className="tj-tag tj-tag-level">{t.levelType}</span>}
+                {t.source && (
+                  <span className="tj-tag tj-tag-source">
+                    {t.source === "others" ? (t.sourceOther || "Others") : SOURCE_LABELS[t.source] || t.source}
+                  </span>
+                )}
                 {t.approach && (
                   <span className={`tj-tag tj-tag-approach-${t.approach}`}>
                     {t.approach === "strong" ? "Strong approach" : "Weak approach"}
@@ -1766,12 +1955,6 @@ function LogView({ trades, onEdit, onDelete, pendingDeleteId, onConfirmDelete, o
                 )}
                 {t.entryModel && (
                   <span className="tj-tag tj-tag-model">{ENTRY_MODEL_LABELS[t.entryModel] || t.entryModel} entry</span>
-                )}
-                {(t.confirmations || []).map((cid) => (
-                  <span key={cid} className="tj-tag tj-tag-confirm">{CONFIRMATION_LABELS[cid] || cid}</span>
-                ))}
-                {t.followThrough && (
-                  <span className={`tj-tag tj-tag-follow-${t.followThrough}`}>Follow-through: {t.followThrough}</span>
                 )}
                 {t.proofLink && (
                   <a className="tj-tag tj-tag-link" href={t.proofLink} target="_blank" rel="noopener noreferrer">
@@ -1786,20 +1969,162 @@ function LogView({ trades, onEdit, onDelete, pendingDeleteId, onConfirmDelete, o
                 <img src={t.screenshotUrl} alt="Trade screenshot" className="tj-log-shot" />
               </a>
             )}
-            {t.note && <div className="tj-log-note">{t.note}</div>}
+            {t.note && (
+              <div className={`tj-log-note ${t.noteImportant ? "tj-log-note-important" : ""}`}>
+                {t.noteImportant && <Star size={12} strokeWidth={2.4} fill="currentColor" className="tj-log-note-star" />}
+                {t.note}
+              </div>
+            )}
           </div>
         );
-      })}
+        })
+      )}
     </div>
   );
 }
 
-function ConfirmationView({ tagStats, approachStats, entryModelStats, followThroughStats }) {
-  const anyTagData = tagStats.perTag.some((t) => t.total > 0) || tagStats.untagged.total > 0;
-  if (!anyTagData) {
-    return (
-      <EmptyState text="Log a few trades with the confirmation checklist ticked to see a win-rate breakdown here." />
-    );
+function PlansView({
+  coinOptions,
+  planForm,
+  setPlanForm,
+  editingPlanId,
+  planFormError,
+  onSubmit,
+  onCancelEdit,
+  plans,
+  onEdit,
+  onDelete,
+  pendingDeleteId,
+  onConfirmDelete,
+  onCancelDelete,
+}) {
+  return (
+    <div>
+      <form className="tj-ticket" onSubmit={onSubmit}>
+        <div className="tj-setup-grid">
+          <label className="tj-field">
+            <span>Date &amp; time (UTC+6)</span>
+            <input
+              type="datetime-local"
+              value={planForm.datetime}
+              onChange={(e) => setPlanForm({ ...planForm, datetime: e.target.value })}
+              required
+            />
+          </label>
+
+          <label className="tj-field">
+            <span>Coin</span>
+            <input
+              list="tj-coins-plan"
+              placeholder="BTC"
+              value={planForm.coin}
+              onChange={(e) => setPlanForm({ ...planForm, coin: e.target.value.toUpperCase() })}
+              required
+            />
+            <datalist id="tj-coins-plan">
+              {coinOptions.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          </label>
+
+          <div className="tj-field">
+            <span>Direction</span>
+            <div className="tj-dir-toggle">
+              <button
+                type="button"
+                className={`tj-dir-btn tj-dir-long ${planForm.direction === "long" ? "active" : ""}`}
+                onClick={() => setPlanForm({ ...planForm, direction: "long" })}
+              >
+                Long
+              </button>
+              <button
+                type="button"
+                className={`tj-dir-btn tj-dir-short ${planForm.direction === "short" ? "active" : ""}`}
+                onClick={() => setPlanForm({ ...planForm, direction: "short" })}
+              >
+                Short
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <label className="tj-field tj-field-note" style={{ marginTop: 14 }}>
+          <span>Note</span>
+          <textarea
+            rows={3}
+            placeholder="What's the plan, and why — level, context, the trigger you're waiting for"
+            value={planForm.note}
+            onChange={(e) => setPlanForm({ ...planForm, note: e.target.value })}
+          />
+        </label>
+
+        <div className="tj-ticket-actions">
+          {planFormError && <span className="tj-form-error">{planFormError}</span>}
+          {editingPlanId && (
+            <button type="button" className="tj-btn-secondary" onClick={onCancelEdit}>
+              Cancel
+            </button>
+          )}
+          <button type="submit" className="tj-btn-primary">
+            {editingPlanId ? "Update plan" : "Save plan"}
+          </button>
+        </div>
+      </form>
+
+      {plans.length === 0 ? (
+        <EmptyState text="No entry plans yet — jot one down above before you pull the trigger." />
+      ) : (
+        <div className="tj-log">
+          {plans.map((p) => (
+            <div key={p.id} className="tj-log-row">
+              <div className="tj-log-main">
+                <span className={`tj-dir-dot tj-dir-dot-${p.direction}`} title={p.direction}></span>
+                <span className="tj-mono tj-log-coin">{p.coin}</span>
+                <span className="tj-mono tj-log-date">
+                  {new Date(p.datetime).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span className="tj-log-actions">
+                  <button className="tj-icon-btn" onClick={() => onEdit(p)} aria-label="Edit plan">
+                    <Pencil size={14} />
+                  </button>
+                  {pendingDeleteId === p.id ? (
+                    <>
+                      <button className="tj-icon-btn tj-confirm" onClick={() => onConfirmDelete(p.id)}>
+                        Delete?
+                      </button>
+                      <button className="tj-icon-btn" onClick={onCancelDelete} aria-label="Cancel delete">
+                        <X size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    <button className="tj-icon-btn" onClick={() => onDelete(p.id)} aria-label="Delete plan">
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </span>
+              </div>
+              {p.note && <div className="tj-log-note">{p.note}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfirmationView({ approachStats, entryModelStats, sourceStats }) {
+  const hasApproach = approachStats.strong.total + approachStats.weak.total > 0;
+  const hasEntryModel = entryModelStats.some((m) => m.total > 0);
+  const hasSource = sourceStats.some((s) => s.total > 0);
+
+  if (!hasApproach && !hasEntryModel && !hasSource) {
+    return <EmptyState text="Log a few trades with Approach, Entry model or Source filled in to see a win-rate breakdown here." />;
   }
 
   const Row = ({ label, s }) => (
@@ -1811,25 +2136,8 @@ function ConfirmationView({ tagStats, approachStats, entryModelStats, followThro
     </tr>
   );
 
-  const hasApproach = approachStats.strong.total + approachStats.weak.total > 0;
-  const hasEntryModel = entryModelStats.some((m) => m.total > 0);
-  const hasFollowThrough = followThroughStats.some((f) => f.total > 0);
-
   return (
     <div>
-      <h3 className="tj-section-title">By confirmation tag</h3>
-      <table className="tj-table">
-        <thead>
-          <tr><th>Tag</th><th>Trades</th><th>Win rate</th><th>PNL</th></tr>
-        </thead>
-        <tbody>
-          {tagStats.perTag.filter((t) => t.total > 0).map((t) => (
-            <Row key={t.id} label={t.label} s={t} />
-          ))}
-          {tagStats.untagged.total > 0 && <Row label="No tag logged" s={tagStats.untagged} />}
-        </tbody>
-      </table>
-
       <h3 className="tj-section-title">By approach</h3>
       {!hasApproach ? (
         <EmptyState text="No approach logged yet." />
@@ -1857,15 +2165,15 @@ function ConfirmationView({ tagStats, approachStats, entryModelStats, followThro
         </table>
       )}
 
-      <h3 className="tj-section-title">By follow-through</h3>
-      {!hasFollowThrough ? (
-        <EmptyState text="No follow-through logged yet." />
+      <h3 className="tj-section-title">By source</h3>
+      {!hasSource ? (
+        <EmptyState text="No source logged yet." />
       ) : (
         <table className="tj-table">
-          <thead><tr><th>Follow-through</th><th>Trades</th><th>Win rate</th><th>PNL</th></tr></thead>
+          <thead><tr><th>Source</th><th>Trades</th><th>Win rate</th><th>PNL</th></tr></thead>
           <tbody>
-            {followThroughStats.filter((f) => f.total > 0).map((f) => (
-              <Row key={f.id} label={f.label} s={f} />
+            {sourceStats.filter((s) => s.total > 0).map((s) => (
+              <Row key={s.id} label={s.label} s={s} />
             ))}
           </tbody>
         </table>
@@ -2232,6 +2540,8 @@ const css = `
   border-radius: 14px;
   padding: 18px 20px 16px;
   margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
 }
 .tj-ticket-stub {
   display:flex; justify-content:space-between; align-items:center;
@@ -2249,7 +2559,7 @@ const css = `
 }
 .tj-field { display:flex; flex-direction:column; gap:6px; font-size:12px; color: var(--text-muted); }
 .tj-field-note { grid-column: 1 / -1; }
-.tj-field input, .tj-field select {
+.tj-field input, .tj-field select, .tj-field textarea {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2259,9 +2569,10 @@ const css = `
   font-family: 'IBM Plex Mono', monospace;
   width: 100%;
 }
+.tj-field textarea { font-family: 'Inter', sans-serif; resize: vertical; min-height: 60px; }
 .tj-field select { appearance:none; -webkit-appearance:none; cursor:pointer; }
 .tj-field-note input { font-family: 'Inter', sans-serif; }
-.tj-field input:focus, .tj-field select:focus { border-color: var(--accent); outline:none; }
+.tj-field input:focus, .tj-field select:focus, .tj-field textarea:focus { border-color: var(--accent); outline:none; }
 .tj-optional { font-style:normal; color: var(--text-muted); font-size:10px; text-transform:uppercase; letter-spacing:0.05em; margin-left:4px; }
 
 .tj-dir-toggle { display:flex; gap:6px; }
@@ -2287,16 +2598,57 @@ const css = `
 .tj-opt-btn {
   flex:1; min-width:70px; padding:9px 8px; border-radius:8px; border:1px solid var(--border);
   background: var(--surface-2); color: var(--text-muted); font-size:12.5px; font-weight:600; cursor:pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
 }
 .tj-opt-btn.active { background: rgba(124,108,255,0.16); border-color: var(--mana); color: var(--mana); }
-.tj-confirm-chips { display:flex; flex-wrap:wrap; gap:8px; }
-.tj-chip-btn {
-  padding:8px 13px; border-radius:20px; border:1px solid var(--border);
-  background: var(--surface-2); color: var(--text-muted); font-size:12.5px; cursor:pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+.tj-opt-btn:active { transform: scale(0.94); }
+.tj-source-other { margin-top: 8px; }
+
+/* Ticket mascot */
+.tj-ticket-mascot {
+  position:absolute; top:14px; right:18px; display:flex; flex-direction:row-reverse;
+  align-items:center; gap:8px; max-width:56%; z-index:2; pointer-events:none;
 }
-.tj-chip-btn.active { background: rgba(232,163,61,0.15); border-color: var(--accent); color: var(--accent); }
+.tj-ticket-slime { width:36px; flex:none; animation: tjSlimeBounce 2.6s ease-in-out infinite; }
+.tj-ticket-slime svg { width:100%; height:auto; display:block; }
+.tj-ticket-speech {
+  background: var(--surface-2); border:1px solid var(--border); border-radius:10px;
+  padding:6px 11px; font-size:11px; color: var(--text-muted); line-height:1.4;
+  max-width:210px; text-align:right;
+}
+@media (max-width:640px) {
+  .tj-ticket-mascot { position:static; justify-content:flex-end; margin-bottom:10px; max-width:100%; }
+  .tj-ticket-speech { text-align:left; }
+}
+
+/* Ticket celebration: confetti + XP toast on submit */
+.tj-ticket-celebrate {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  pointer-events:none; z-index:6;
+}
+.tj-confetti-burst { position:absolute; left:50%; top:42%; width:0; height:0; }
+.tj-confetti-piece {
+  position:absolute; width:7px; height:7px; border-radius:2px; left:0; top:0;
+  animation: tjConfettiBurst 0.9s ease-out forwards;
+}
+@keyframes tjConfettiBurst {
+  0% { transform: translate(0,0) rotate(0deg); opacity:1; }
+  100% { transform: translate(var(--dx), var(--dy)) rotate(220deg); opacity:0; }
+}
+.tj-xp-toast {
+  position:relative; background: var(--surface); border:1px solid var(--accent);
+  color: var(--accent); font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:13px;
+  padding:10px 18px; border-radius:30px; display:flex; align-items:center; gap:8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  animation: tjToastPop 1.6s ease forwards;
+}
+@keyframes tjToastPop {
+  0% { transform: scale(0.7) translateY(8px); opacity:0; }
+  15% { transform: scale(1.05) translateY(0); opacity:1; }
+  25% { transform: scale(1) translateY(0); opacity:1; }
+  80% { transform: scale(1) translateY(0); opacity:1; }
+  100% { transform: scale(0.96) translateY(-6px); opacity:0; }
+}
 
 /* Proof: screenshot link + upload */
 .tj-proof-row { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top:14px; }
@@ -2327,14 +2679,11 @@ const css = `
 /* Log row tags */
 .tj-log-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; padding-top:8px; border-top:1px dashed var(--border); }
 .tj-tag { font-size:11px; padding:3px 9px; border-radius:20px; background: var(--surface-2); border:1px solid var(--border); color: var(--text-muted); }
-.tj-tag-confirm { color: var(--accent); border-color: rgba(232,163,61,0.35); }
 .tj-tag-approach-strong { color: var(--pos); border-color: rgba(62,207,142,0.35); }
 .tj-tag-approach-weak { color: var(--neg); border-color: rgba(242,84,91,0.35); }
 .tj-tag-model { color: var(--mana); border-color: rgba(124,108,255,0.35); }
-.tj-tag-follow-yes { color: var(--pos); border-color: rgba(62,207,142,0.35); }
-.tj-tag-follow-no { color: var(--neg); border-color: rgba(242,84,91,0.35); }
-.tj-tag-follow-partial { color: var(--accent); border-color: rgba(232,163,61,0.35); }
 .tj-tag-link { color: var(--mana); border-color: rgba(124,108,255,0.35); cursor:pointer; text-decoration:none; }
+.tj-tag-source { color: var(--text); border-color: var(--border); font-weight:600; }
 .tj-log-shot { display:block; width:72px; height:52px; border-radius:6px; object-fit:cover; border:1px solid var(--border); margin-top:8px; cursor:pointer; }
 
 @media (max-width: 480px) {
@@ -2398,6 +2747,15 @@ const css = `
 
 /* Log */
 .tj-log { display:flex; flex-direction:column; gap:8px; }
+.tj-log-toolbar { display:flex; justify-content:flex-end; margin-bottom:4px; }
+.tj-important-toggle {
+  display:flex; align-items:center; gap:6px; font-family:'Space Grotesk', sans-serif; font-weight:600;
+  font-size:12.5px; padding:7px 13px; border-radius:20px; border:1px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted); cursor:pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.tj-important-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.tj-important-toggle.active { background: rgba(232,163,61,0.16); border-color: var(--accent); color: var(--accent); }
 .tj-log-row { background: var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
 .tj-log-main { display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:13px; }
 .tj-dir-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
@@ -2417,6 +2775,22 @@ const css = `
 .tj-icon-btn:hover { color: var(--text); border-color: var(--border); }
 .tj-icon-btn.tj-confirm { color: var(--neg); font-family:'Inter',sans-serif; }
 .tj-log-note { color: var(--text-muted); font-size:12px; margin-top:6px; padding-top:6px; border-top:1px dashed var(--border); }
+.tj-log-note-important {
+  color: var(--text); background: rgba(232,163,61,0.08); border: 1px solid rgba(232,163,61,0.3);
+  border-top: 1px solid rgba(232,163,61,0.3); border-radius:8px; padding:8px 10px; margin-top:8px;
+}
+.tj-log-note-star { color: var(--accent); display:inline; vertical-align:-1px; margin-right:5px; }
+
+.tj-note-row { display:flex; gap:8px; align-items:center; }
+.tj-note-row input { flex:1; }
+.tj-note-star {
+  flex:none; width:38px; height:38px; border-radius:8px; border:1px solid var(--border);
+  background: var(--surface-2); color: var(--text-muted); display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+}
+.tj-note-star:hover { border-color: var(--accent); color: var(--accent); }
+.tj-note-star.active { background: rgba(232,163,61,0.18); border-color: var(--accent); color: var(--accent); }
+.tj-note-star:active { transform: scale(0.9); }
 
 @media (max-width: 640px) {
   .tj-hero-value { font-size:32px; }
