@@ -255,6 +255,7 @@ const emptyForm = () => ({
   entry: "",
   exit: "",
   margin: "",
+  roi: "",
   pnl: "",
   note: "",
   noteImportant: false,
@@ -446,16 +447,30 @@ export default function TradeJournal() {
   async function handleSubmit(e) {
     e.preventDefault();
     const coin = form.coin.trim().toUpperCase();
-    if (!coin || !form.datetime || form.entry === "" || form.exit === "" || form.margin === "" || form.pnl === "") {
-      setFormError("Fill in every field to log the trade.");
+    if (!coin || !form.datetime || form.entry === "" || form.exit === "" || form.pnl === "") {
+      setFormError("Fill in date, coin, entry/exit price and PNL to log the trade.");
+      return;
+    }
+    const marginTyped = form.margin.trim() !== "" ? parseFloat(form.margin) : null;
+    const roiTyped = form.roi.trim() !== "" ? parseFloat(form.roi) : null;
+    if (marginTyped === null && roiTyped === null) {
+      setFormError("Provide either Margin or ROI so the position size can be recorded.");
       return;
     }
     const entryNum = parseFloat(form.entry);
     const exitNum = parseFloat(form.exit);
-    const marginNum = parseFloat(form.margin);
     const pnlNum = parseFloat(form.pnl);
+    let marginNum;
+    if (marginTyped !== null && !Number.isNaN(marginTyped) && marginTyped !== 0) {
+      marginNum = marginTyped;
+    } else if (roiTyped !== null && !Number.isNaN(roiTyped) && roiTyped !== 0) {
+      marginNum = pnlNum / (roiTyped / 100);
+    } else {
+      setFormError("Margin or ROI value looks invalid.");
+      return;
+    }
     if ([entryNum, exitNum, marginNum, pnlNum].some((n) => Number.isNaN(n))) {
-      setFormError("Price, margin and PNL need to be numbers.");
+      setFormError("Price, Margin/ROI and PNL need to be numbers.");
       return;
     }
 
@@ -519,6 +534,7 @@ export default function TradeJournal() {
       entry: String(t.entry),
       exit: String(t.exit),
       margin: String(t.margin),
+      roi: "",
       pnl: String(t.pnl),
       note: t.note || "",
       noteImportant: Boolean(t.noteImportant),
@@ -893,14 +909,21 @@ export default function TradeJournal() {
     return Array.from(new Set([...used, ...DEFAULT_COINS])).sort();
   }, [trades]);
 
-  const marginVal = parseFloat(form.margin);
+  const marginTypedVal = form.margin.trim() !== "" ? parseFloat(form.margin) : null;
+  const roiTypedVal = form.roi.trim() !== "" ? parseFloat(form.roi) : null;
   const pnlVal = parseFloat(form.pnl);
-  const roiPreview =
-    !Number.isNaN(marginVal) && marginVal !== 0 && !Number.isNaN(pnlVal)
-      ? (pnlVal / marginVal) * 100
-      : null;
+  let resolvedMargin = null;
+  let resolvedRoi = null;
+  if (marginTypedVal !== null && !Number.isNaN(marginTypedVal) && marginTypedVal !== 0) {
+    resolvedMargin = marginTypedVal;
+    resolvedRoi = !Number.isNaN(pnlVal) ? (pnlVal / marginTypedVal) * 100 : null;
+  } else if (roiTypedVal !== null && !Number.isNaN(roiTypedVal) && roiTypedVal !== 0 && !Number.isNaN(pnlVal)) {
+    resolvedRoi = roiTypedVal;
+    resolvedMargin = pnlVal / (roiTypedVal / 100);
+  }
 
   const tabs = [
+    { id: "plans", label: "Entry Plans" },
     { id: "dashboard", label: "Dashboard" },
     { id: "weekly", label: "Weekly" },
     { id: "coins", label: "Coins" },
@@ -908,7 +931,6 @@ export default function TradeJournal() {
     { id: "confirm", label: "Setup Stats" },
     { id: "chart", label: "Chart" },
     { id: "log", label: "Log" },
-    { id: "plans", label: "Entry Plans" },
   ];
 
   if (!authReady) {
@@ -1226,7 +1248,9 @@ export default function TradeJournal() {
           </label>
 
           <label className="tj-field">
-            <span>Margin</span>
+            <span>
+              Margin <em className="tj-optional">or ROI</em>
+            </span>
             <input
               type="number"
               step="any"
@@ -1235,7 +1259,20 @@ export default function TradeJournal() {
               placeholder="0.00"
               value={form.margin}
               onChange={(e) => setForm({ ...form, margin: e.target.value })}
-              required
+            />
+          </label>
+
+          <label className="tj-field">
+            <span>
+              ROI % <em className="tj-optional">or Margin</em>
+            </span>
+            <input
+              type="number"
+              step="any"
+              inputMode="decimal"
+              placeholder="e.g. 8.5"
+              value={form.roi}
+              onChange={(e) => setForm({ ...form, roi: e.target.value })}
             />
           </label>
 
@@ -1253,13 +1290,13 @@ export default function TradeJournal() {
           </label>
 
           <div className="tj-field tj-field-roi">
-            <span>ROI</span>
+            <span>Will save</span>
             <span
               className={`tj-mono tj-roi-preview ${
-                roiPreview > 0 ? "pos" : roiPreview < 0 ? "neg" : ""
+                resolvedRoi > 0 ? "pos" : resolvedRoi < 0 ? "neg" : ""
               }`}
             >
-              {roiPreview === null ? "—" : fmtPct(roiPreview)}
+              {resolvedMargin === null ? "—" : `${fmtMoney(resolvedMargin)} · ${fmtPct(resolvedRoi)}`}
             </span>
           </div>
 
@@ -2045,6 +2082,13 @@ function PlansView({
               >
                 Short
               </button>
+              <button
+                type="button"
+                className={`tj-dir-btn tj-dir-think ${planForm.direction === "think" ? "active" : ""}`}
+                onClick={() => setPlanForm({ ...planForm, direction: "think" })}
+              >
+                Think
+              </button>
             </div>
           </div>
         </div>
@@ -2080,6 +2124,7 @@ function PlansView({
             <div key={p.id} className="tj-log-row">
               <div className="tj-log-main">
                 <span className={`tj-dir-dot tj-dir-dot-${p.direction}`} title={p.direction}></span>
+                {p.direction === "think" && <span className="tj-tag tj-tag-think">Think</span>}
                 <span className="tj-mono tj-log-coin">{p.coin}</span>
                 <span className="tj-mono tj-log-date">
                   {new Date(p.datetime).toLocaleString(undefined, {
@@ -2109,7 +2154,7 @@ function PlansView({
                   )}
                 </span>
               </div>
-              {p.note && <div className="tj-log-note">{p.note}</div>}
+              {p.note && <div className="tj-plan-note">{p.note}</div>}
             </div>
           ))}
         </div>
@@ -2451,6 +2496,7 @@ const css = `
 .tj-header { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
 .tj-title { font-size: 26px; font-weight:700; margin:0; letter-spacing: -0.01em; }
 .tj-subtitle { color: var(--text-muted); font-size: 13px; margin:4px 0 0; }
+.tj-header-actions { display:flex; align-items:center; gap:14px; }
 .tj-link-btn { background:none; border:none; color: var(--text-muted); font-size:12px; cursor:pointer; padding:4px 2px; text-decoration:underline; text-underline-offset:3px; }
 .tj-link-btn:hover { color: var(--text); }
 
@@ -2583,6 +2629,7 @@ const css = `
 }
 .tj-dir-btn.tj-dir-long.active { background: rgba(232,163,61,0.15); border-color: var(--long); color: var(--long); }
 .tj-dir-btn.tj-dir-short.active { background: rgba(47,184,172,0.15); border-color: var(--short); color: var(--short); }
+.tj-dir-btn.tj-dir-think.active { background: rgba(124,108,255,0.15); border-color: var(--mana); color: var(--mana); }
 
 /* Setup & confirmation block */
 .tj-setup-block { margin-top:18px; padding-top:16px; border-top:1px dashed var(--border); }
@@ -2761,6 +2808,12 @@ const css = `
 .tj-dir-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
 .tj-dir-dot-long { background: var(--long); }
 .tj-dir-dot-short { background: var(--short); }
+.tj-dir-dot-think { background: var(--mana); }
+.tj-tag-think { color: var(--mana); border-color: rgba(124,108,255,0.35); font-weight:600; }
+.tj-plan-note {
+  color: var(--text); background: rgba(124,108,255,0.08); border: 1px solid rgba(124,108,255,0.3);
+  border-radius:8px; padding:10px 12px; margin-top:8px; font-size:13px; line-height:1.65;
+}
 .tj-log-coin { font-weight:600; min-width:44px; }
 .tj-log-date { color: var(--text-muted); min-width:120px; }
 .tj-log-prices { color: var(--text-muted); }
