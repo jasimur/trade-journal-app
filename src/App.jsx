@@ -998,3 +998,1002 @@ export default function TradeJournal() {
           </button>
         </div>
       </header>
+      <form className="tj-ticket" onSubmit={handleSubmit}>
+        <TicketMascot mood={ticketMood.state} line={ticketMood.line} celebrating={celebration.show} />
+        {celebration.show && (
+          <div className="tj-ticket-celebrate" aria-hidden="true">
+            {celebration.kind === "new" && <ConfettiBurst />}
+            <div className="tj-xp-toast">
+              <Sparkles size={14} strokeWidth={2.4} />
+              {celebration.kind === "new" ? `Trade logged · +${celebration.xp} XP` : "Trade updated"}
+            </div>
+          </div>
+        )}
+        <div className="tj-ticket-stub">
+          <span className="tj-mono tj-ticket-num">
+            {editingId ? "EDITING TICKET" : `№ ${String(stats.total + 1).padStart(4, "0")}`}
+          </span>
+          <span className="tj-mono tj-ticket-date">
+            {new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+          </span>
+        </div>
+
+        <div className="tj-binance-import">
+          <div className="tj-import-heading">
+            <div>
+              <strong><ClipboardPaste size={15} /> Quick import from Binance</strong>
+              <span>Paste one closed position. The journal will extract the context that matters for review.</span>
+            </div>
+            {binanceImported && <span className="tj-import-success"><ClipboardCheck size={14} /> Fields filled</span>}
+          </div>
+          <textarea
+            className="tj-import-textarea"
+            value={binancePaste}
+            onChange={(e) => setBinancePaste(e.target.value)}
+            placeholder={"ATOMUSDT\nPerp\n15x\nCross Long\n…paste the full Binance position-history block"}
+            aria-label="Paste Binance position history"
+          />
+          <div className="tj-import-actions">
+            <button type="button" className="tj-btn-import" onClick={importBinanceTrade} disabled={!binancePaste.trim()}>
+              <ClipboardPaste size={15} /> Parse &amp; fill trade
+            </button>
+            <span className="tj-import-hint">Prices · PNL · ROI · dates · leverage · volume · duration · Max OI</span>
+          </div>
+        </div>
+
+        <div className="tj-ticket-fields">
+          <label className="tj-field">
+            <span>Date &amp; time</span>
+            <input
+              type="datetime-local"
+              value={form.datetime}
+              onChange={(e) => setForm({ ...form, datetime: e.target.value })}
+              required
+            />
+          </label>
+
+          <label className="tj-field">
+            <span>Coin</span>
+            <input
+              list="tj-coins"
+              placeholder="BTC"
+              value={form.coin}
+              onChange={(e) => setForm({ ...form, coin: e.target.value.toUpperCase() })}
+              required
+            />
+            <datalist id="tj-coins">
+              {coinOptions.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          </label>
+
+          <div className="tj-field">
+            <span>Direction</span>
+            <div className="tj-dir-toggle">
+              <button
+                type="button"
+                className={`tj-dir-btn tj-dir-long ${form.direction === "long" ? "active" : ""}`}
+                onClick={() => setForm({ ...form, direction: "long" })}
+              >
+                Long
+              </button>
+              <button
+                type="button"
+                className={`tj-dir-btn tj-dir-short ${form.direction === "short" ? "active" : ""}`}
+                onClick={() => setForm({ ...form, direction: "short" })}
+              >
+                Short
+              </button>
+            </div>
+          </div>
+
+          <label className="tj-field">
+            <span>Entry price</span>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={form.entry}
+              onChange={(e) => setForm({ ...form, entry: e.target.value })}
+              required
+            />
+          </label>
+
+          <label className="tj-field">
+            <span>Exit price</span>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={form.exit}
+              onChange={(e) => setForm({ ...form, exit: e.target.value })}
+              required
+            />
+          </label>
+
+          <label className="tj-field">
+            <span>
+              Margin <em className="tj-optional">or ROI</em>
+            </span>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={form.margin}
+              onChange={(e) => setForm({ ...form, margin: e.target.value })}
+            />
+          </label>
+
+          <label className="tj-field">
+            <span>
+              ROI % <em className="tj-optional">or Margin</em>
+            </span>
+            <input
+              type="number"
+              step="any"
+              inputMode="decimal"
+              placeholder="e.g. 8.5"
+              value={form.roi}
+              onChange={(e) => setForm({ ...form, roi: e.target.value })}
+            />
+          </label>
+
+          <label className="tj-field">
+            <span>PNL</span>
+            <input
+              type="number"
+              step="any"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={form.pnl}
+              onChange={(e) => setForm({ ...form, pnl: e.target.value })}
+              required
+            />
+          </label>
+
+          <div className="tj-field tj-field-roi">
+            <span>Will save</span>
+            <span
+              className={`tj-mono tj-roi-preview ${
+                resolvedRoi > 0 ? "pos" : resolvedRoi < 0 ? "neg" : ""
+              }`}
+            >
+              {resolvedMargin === null ? "—" : `${fmtMoney(resolvedMargin)} · ${fmtPct(resolvedRoi)}`}
+            </span>
+          </div>
+
+          <label className="tj-field tj-field-note">
+            <span>Note (optional)</span>
+            <div className="tj-note-row">
+              <input
+                type="text"
+                placeholder="Reason for the trade, or anything extra that happened"
+                value={form.note}
+                onChange={(e) => setForm({ ...form, note: e.target.value })}
+              />
+              <button
+                type="button"
+                className={`tj-note-star ${form.noteImportant ? "active" : ""}`}
+                onClick={() => setForm({ ...form, noteImportant: !form.noteImportant })}
+                aria-pressed={form.noteImportant}
+                aria-label="Mark this note as important"
+                title="Mark this note as important"
+              >
+                <Star size={16} strokeWidth={2.2} fill={form.noteImportant ? "currentColor" : "none"} />
+              </button>
+            </div>
+          </label>
+        </div>
+
+        <div className="tj-setup-block">
+          <span className="tj-setup-label">
+            Setup <em className="tj-optional">optional</em>
+          </span>
+          <div className="tj-setup-grid">
+            <div className="tj-field">
+              <span>Approach</span>
+              <div className="tj-opt-toggle">
+                <button
+                  type="button"
+                  className={`tj-opt-btn ${form.approach === "strong" ? "active" : ""}`}
+                  onClick={() => toggleSingle("approach", "strong")}
+                >
+                  Strong
+                </button>
+                <button
+                  type="button"
+                  className={`tj-opt-btn ${form.approach === "weak" ? "active" : ""}`}
+                  onClick={() => toggleSingle("approach", "weak")}
+                >
+                  Weak
+                </button>
+              </div>
+            </div>
+
+            <div className="tj-field">
+              <span>Entry model</span>
+              <div className="tj-opt-toggle">
+                {ENTRY_MODELS.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`tj-opt-btn ${form.entryModel === m.id ? "active" : ""}`}
+                    onClick={() => toggleSingle("entryModel", m.id)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="tj-field">
+              <span>Source</span>
+              <div className="tj-opt-toggle">
+                {SOURCE_OPTIONS.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`tj-opt-btn ${form.source === s.id ? "active" : ""}`}
+                    onClick={() => toggleSingle("source", s.id)}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+              {form.source === "others" && (
+                <input
+                  type="text"
+                  className="tj-source-other"
+                  placeholder="Which source?"
+                  value={form.sourceOther}
+                  onChange={(e) => setForm({ ...form, sourceOther: e.target.value })}
+                />
+              )}
+            </div>
+          </div>
+
+          <span className="tj-setup-sublabel">
+            Proof <em className="tj-optional">optional</em>
+          </span>
+          <div className="tj-proof-row">
+            <label className="tj-field tj-field-prooflink">
+              <span>Screenshot link</span>
+              <div className="tj-input-icon-wrap">
+                <Link2 size={14} strokeWidth={2.2} />
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={form.proofLink}
+                  onChange={(e) => setForm({ ...form, proofLink: e.target.value })}
+                />
+              </div>
+            </label>
+
+            <div className="tj-field tj-field-shot">
+              <span>Screenshot upload (saved to Firebase)</span>
+              {screenshotPreview ? (
+                <div className="tj-shot-preview">
+                  <img src={screenshotPreview} alt="Trade screenshot" />
+                  {uploadingShot ? (
+                    <div className="tj-shot-uploading">
+                      <Loader2 size={16} className="tj-spin" />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="tj-shot-remove"
+                      onClick={removeScreenshot}
+                      aria-label="Remove screenshot"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <label className="tj-shot-upload">
+                  <ImagePlus size={16} strokeWidth={2.2} />
+                  <span>Choose image</span>
+                  <input type="file" accept="image/*" onChange={handleScreenshotChange} hidden />
+                </label>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="tj-ticket-actions">
+          {formError && <span className="tj-form-error">{formError}</span>}
+          <button type="button" className="tj-btn-plan" onClick={openTradePlan}>
+            <Calendar size={14} strokeWidth={2.2} /> Trade plan
+          </button>
+          {editingId && (
+            <button type="button" className="tj-btn-secondary" onClick={cancelEdit}>
+              Cancel
+            </button>
+          )}
+          <button type="submit" className="tj-btn-primary" disabled={uploadingShot}>
+            {uploadingShot ? "Uploading…" : editingId ? "Update trade" : "Log trade"}
+          </button>
+        </div>
+      </form>
+
+      <div className="tj-filter-bar">
+        <div className="tj-filter-presets">
+          {DATE_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`tj-filter-chip ${dateRange.preset === p.id ? "active" : ""}`}
+              onClick={() => applyDatePreset(p.id)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <div className="tj-filter-dates">
+          <label className="tj-filter-date-field">
+            <Calendar size={13} strokeWidth={2.2} />
+            <input
+              type="date"
+              value={dateRange.start}
+              max={dateRange.end || undefined}
+              onChange={(e) =>
+                setDateRange({ ...dateRange, start: e.target.value, preset: "custom" })
+              }
+              aria-label="Start date"
+            />
+          </label>
+          <span className="tj-filter-arrow">→</span>
+          <label className="tj-filter-date-field">
+            <input
+              type="date"
+              value={dateRange.end}
+              min={dateRange.start || undefined}
+              onChange={(e) =>
+                setDateRange({ ...dateRange, end: e.target.value, preset: "custom" })
+              }
+              aria-label="End date"
+            />
+          </label>
+          {isFiltered && (
+            <button
+              type="button"
+              className="tj-filter-clear"
+              onClick={() => applyDatePreset("all")}
+              aria-label="Clear date filter"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        <span className="tj-filter-count tj-mono">
+          {filteredTrades.length} of {trades.length} trade{trades.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      <nav className="tj-tabs">
+        {tabs.map((tb) => (
+          <button
+            key={tb.id}
+            type="button"
+            className={`tj-tab ${activeTab === tb.id ? "active" : ""}`}
+            onClick={() => setActiveTab(tb.id)}
+          >
+            {tb.label}
+          </button>
+        ))}
+      </nav>
+
+      <main className="tj-main">
+        {activeTab === "dashboard" && (
+          <DashboardView
+            stats={stats}
+            filteredStats={filteredStats}
+            rank={traderRank}
+            milestoneHit={milestoneHit}
+            insights={insights}
+            reviewSignals={reviewSignals}
+            isFiltered={isFiltered}
+            rangeLabel={rangeLabel}
+          />
+        )}
+        {activeTab === "weekly" && (
+          <PeriodView
+            weeks={weeklyGroups}
+            months={monthlyGroups}
+            thisWeekKey={thisWeekKey}
+            thisMonthKey={thisMonthKey}
+          />
+        )}
+        {activeTab === "coins" && <CoinsView coins={coinStats} />}
+        {activeTab === "longshort" && <LongShortView data={directionStats} />}
+        {activeTab === "confirm" && (
+          <ConfirmationView
+            approachStats={approachStats}
+            entryModelStats={entryModelStats}
+            sourceStats={sourceStats}
+          />
+        )}
+        {activeTab === "chart" && <ChartView data={chartData} />}
+        {activeTab === "log" && (
+          <LogView
+            trades={sortedTradesDesc}
+            onEdit={startEdit}
+            onDelete={requestDelete}
+            pendingDeleteId={pendingDeleteId}
+            onConfirmDelete={confirmDelete}
+            onCancelDelete={cancelDelete}
+          />
+        )}
+        {activeTab === "plans" && (
+          <PlansView
+            coinOptions={coinOptions}
+            planForm={planForm}
+            setPlanForm={setPlanForm}
+            editingPlanId={editingPlanId}
+            planFormError={planFormError}
+            onSubmit={handlePlanSubmit}
+            onCancelEdit={cancelEditPlan}
+            plans={plans}
+            onEdit={startEditPlan}
+            onDelete={requestDeletePlan}
+            pendingDeleteId={pendingDeletePlanId}
+            onConfirmDelete={confirmDeletePlan}
+            onCancelDelete={cancelDeletePlan}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
+
+function EmptyState({ text }) {
+  return <p className="tj-empty">{text || "No trades yet. Log your first trade above to start building your journal."}</p>;
+}
+
+function StatCard({ label, value, tone, icon: Icon }) {
+  return (
+    <div className="tj-card">
+      <span className="tj-card-label">
+        {Icon && <Icon size={13} strokeWidth={2.2} className="tj-card-icon" />}
+        {label}
+      </span>
+      <span className={`tj-mono tj-card-value ${tone || ""}`}>{value}</span>
+    </div>
+  );
+}
+
+function RankBadge({ level, progress }) {
+  const r = 27;
+  const c = 2 * Math.PI * r;
+  const offset = c * (1 - Math.max(0, Math.min(1, progress)));
+  return (
+    <div className="tj-rank-badge">
+      <svg viewBox="0 0 64 64" className="tj-rank-ring" aria-hidden="true">
+        <circle cx="32" cy="32" r={r} className="tj-rank-ring-bg" />
+        <circle
+          cx="32"
+          cy="32"
+          r={r}
+          className="tj-rank-ring-fg"
+          strokeDasharray={c}
+          strokeDashoffset={offset}
+        />
+      </svg>
+      <span className="tj-rank-level tj-mono">{level}</span>
+    </div>
+  );
+}
+
+function DashboardView({ stats, filteredStats, rank, milestoneHit, insights, reviewSignals, isFiltered, rangeLabel }) {
+  const noDataAtAll = stats.total === 0;
+  const noDataInRange = !noDataAtAll && filteredStats.total === 0;
+
+  return (
+    <div>
+      <div className={`tj-rank-card ${milestoneHit ? "tj-rank-milestone" : ""}`}>
+        <RankBadge level={rank.level} progress={rank.xpProgress} />
+        <div className="tj-rank-info">
+          <span className="tj-rank-eyebrow tj-mono">
+            <Sparkles size={12} strokeWidth={2.2} />
+            Trader rank · all-time
+          </span>
+          <span className="tj-rank-title tj-display">{rank.title}</span>
+          <div className="tj-rank-progress-track">
+            <div className="tj-rank-progress-fill" style={{ width: `${rank.xpProgress * 100}%` }} />
+          </div>
+          <span className="tj-rank-next">
+            {milestoneHit
+              ? `🎉 Milestone reached — ${stats.total} trades logged!`
+              : `${rank.tradesToNext} more trade${rank.tradesToNext !== 1 ? "s" : ""} to level ${rank.level + 1}`}
+          </span>
+        </div>
+      </div>
+
+      <div className="tj-hero">
+        <span className="tj-hero-label">Total PNL{isFiltered ? ` · ${rangeLabel}` : ""}</span>
+        <span
+          className={`tj-mono tj-hero-value ${
+            filteredStats.totalPnl > 0 ? "pos" : filteredStats.totalPnl < 0 ? "neg" : ""
+          }`}
+        >
+          {fmtMoney(filteredStats.totalPnl)}
+        </span>
+      </div>
+      <div className="tj-stat-grid">
+        <StatCard label="Total margin" value={fmtMoney(filteredStats.totalMargin)} />
+        <StatCard label="Total trades" value={filteredStats.total} />
+        <StatCard label="Winning trades" value={filteredStats.wins} tone="pos" />
+        <StatCard label="Losing trades" value={filteredStats.losses} tone="neg" />
+        <StatCard label="Win rate" value={fmtPct(filteredStats.winRate)} />
+        <StatCard
+          label="Avg PNL / trade"
+          value={fmtMoney(filteredStats.avgPnl)}
+          tone={filteredStats.avgPnl > 0 ? "pos" : filteredStats.avgPnl < 0 ? "neg" : ""}
+        />
+        <StatCard
+          icon={Target}
+          label="Profit factor"
+          value={
+            filteredStats.profitFactor === null
+              ? "—"
+              : filteredStats.profitFactor === Infinity
+              ? "∞"
+              : filteredStats.profitFactor.toFixed(2)
+          }
+          tone={filteredStats.profitFactor >= 1.5 ? "pos" : filteredStats.profitFactor !== null && filteredStats.profitFactor < 1 ? "neg" : ""}
+        />
+        <StatCard icon={TrendingUp} label="Avg winner" value={fmtMoney(filteredStats.avgWin)} tone="pos" />
+        <StatCard icon={TrendingDown} label="Avg loser" value={fmtMoney(-Math.abs(filteredStats.avgLoss))} tone="neg" />
+      </div>
+
+      {!noDataAtAll && !noDataInRange && (
+        <>
+          <h3 className="tj-section-title">Trading insights{isFiltered ? ` · ${rangeLabel}` : ""}</h3>
+          <div className="tj-stat-grid">
+            <StatCard
+              icon={Flame}
+              label="Current streak"
+              value={
+                insights.currentStreakCount
+                  ? `${insights.currentStreakCount}${insights.currentStreakType === "win" ? "W" : "L"}`
+                  : "—"
+              }
+              tone={
+                insights.currentStreakType === "win"
+                  ? "pos"
+                  : insights.currentStreakType === "loss"
+                  ? "neg"
+                  : ""
+              }
+            />
+            <StatCard icon={Trophy} label="Best win streak" value={insights.bestWinStreak} tone="pos" />
+            <StatCard
+              icon={Shield}
+              label="Profit factor"
+              value={
+                insights.profitFactor === null
+                  ? "—"
+                  : insights.profitFactor === Infinity
+                  ? "∞"
+                  : insights.profitFactor.toFixed(2)
+              }
+            />
+            <StatCard
+              icon={TrendingDown}
+              label="Max drawdown"
+              value={fmtMoney(-Math.abs(insights.maxDrawdown))}
+              tone={insights.maxDrawdown > 0 ? "neg" : ""}
+            />
+            <StatCard
+              icon={Trophy}
+              label="Best trade"
+              value={insights.best ? `${insights.best.coin} ${fmtMoney(insights.best.pnl)}` : "—"}
+              tone="pos"
+            />
+            <StatCard
+              icon={TrendingDown}
+              label="Worst trade"
+              value={insights.worst ? `${insights.worst.coin} ${fmtMoney(insights.worst.pnl)}` : "—"}
+              tone="neg"
+            />
+          </div>
+          <div className="tj-coach-grid">
+            <div className="tj-coach-card tj-coach-strength">
+              <div className="tj-coach-heading"><Brain size={15} /> What is working</div>
+              {reviewSignals.strengths.map((line, index) => <p key={index}>{line}</p>)}
+            </div>
+            <div className="tj-coach-card tj-coach-focus">
+              <div className="tj-coach-heading"><AlertTriangle size={15} /> What to improve</div>
+              {reviewSignals.focus.map((line, index) => <p key={index}>{line}</p>)}
+            </div>
+          </div>
+        </>
+      )}
+
+      {noDataAtAll && <EmptyState />}
+      {noDataInRange && (
+        <EmptyState text="No trades in this date range — try widening it or choosing “All time.”" />
+      )}
+    </div>
+  );
+}
+
+function PeriodView({ weeks, months, thisWeekKey, thisMonthKey }) {
+  const [mode, setMode] = useState("weekly");
+  const isWeekly = mode === "weekly";
+  const groups = isWeekly ? weeks : months;
+  const currentKey = isWeekly ? thisWeekKey : thisMonthKey;
+  const current = groups.find((g) => g.key === currentKey);
+  const previous = groups.filter((g) => g.key !== currentKey);
+
+  return (
+    <div>
+      <div className="tj-period-toggle">
+        <button
+          type="button"
+          className={`tj-period-btn ${isWeekly ? "active" : ""}`}
+          onClick={() => setMode("weekly")}
+        >
+          Weekly
+        </button>
+        <button
+          type="button"
+          className={`tj-period-btn ${!isWeekly ? "active" : ""}`}
+          onClick={() => setMode("monthly")}
+        >
+          Monthly
+        </button>
+      </div>
+
+      <div className="tj-hero tj-hero-week">
+        <span className="tj-hero-label">
+          {isWeekly ? "This week" : "This month"}
+          {current ? ` · ${current.label}` : ""}
+        </span>
+        <span
+          className={`tj-mono tj-hero-value ${
+            current && current.pnl > 0 ? "pos" : current && current.pnl < 0 ? "neg" : ""
+          }`}
+        >
+          {fmtMoney(current ? current.pnl : 0)}
+        </span>
+      </div>
+      <div className="tj-stat-grid">
+        <StatCard label={`Trades this ${isWeekly ? "week" : "month"}`} value={current ? current.total : 0} />
+        <StatCard
+          label={`${isWeekly ? "Weekly" : "Monthly"} margin`}
+          value={fmtMoney(current ? current.margin : 0)}
+        />
+        <StatCard
+          label={`${isWeekly ? "Weekly" : "Monthly"} win rate`}
+          value={fmtPct(current ? current.winRate : 0)}
+        />
+      </div>
+      <h3 className="tj-section-title">{isWeekly ? "Previous weeks" : "Previous months"}</h3>
+      {previous.length === 0 ? (
+        <EmptyState
+          text={
+            isWeekly
+              ? "No previous weeks yet — keep logging to build a week-over-week view."
+              : "No previous months yet — keep logging to build a month-over-month view."
+          }
+        />
+      ) : (
+        <table className="tj-table">
+          <thead>
+            <tr>
+              <th>{isWeekly ? "Week" : "Month"}</th>
+              <th>Trades</th>
+              <th>PNL</th>
+              <th>Win rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {previous.map((g) => (
+              <tr key={g.key}>
+                <td>{g.label}</td>
+                <td className="tj-mono">{g.total}</td>
+                <td className={`tj-mono ${g.pnl > 0 ? "pos" : g.pnl < 0 ? "neg" : ""}`}>{fmtMoney(g.pnl)}</td>
+                <td className="tj-mono">{fmtPct(g.winRate)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function CoinsView({ coins }) {
+  if (coins.length === 0) return <EmptyState />;
+  return (
+    <table className="tj-table">
+      <thead>
+        <tr>
+          <th>Coin</th>
+          <th>Trades</th>
+          <th>Total PNL</th>
+          <th>Win rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        {coins.map((c) => (
+          <tr key={c.coin}>
+            <td className="tj-mono tj-coin-badge">{c.coin}</td>
+            <td className="tj-mono">{c.total}</td>
+            <td className={`tj-mono ${c.pnl > 0 ? "pos" : c.pnl < 0 ? "neg" : ""}`}>{fmtMoney(c.pnl)}</td>
+            <td className="tj-mono">{fmtPct(c.winRate)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function DirectionCard({ label, tone, stats }) {
+  return (
+    <div className={`tj-card tj-dir-card tj-dir-card-${tone}`}>
+      <span className="tj-dir-card-label">{label}</span>
+      <div className="tj-dir-card-row">
+        <span>Trades</span>
+        <span className="tj-mono">{stats.total}</span>
+      </div>
+      <div className="tj-dir-card-row">
+        <span>PNL</span>
+        <span className={`tj-mono ${stats.pnl > 0 ? "pos" : stats.pnl < 0 ? "neg" : ""}`}>
+          {fmtMoney(stats.pnl)}
+        </span>
+      </div>
+      <div className="tj-dir-card-row">
+        <span>Win rate</span>
+        <span className="tj-mono">{fmtPct(stats.winRate)}</span>
+      </div>
+    </div>
+  );
+}
+
+function LongShortView({ data }) {
+  const { long, short } = data;
+  const total = long.total + short.total;
+  if (total === 0) return <EmptyState />;
+  return (
+    <div className="tj-ls-grid">
+      <DirectionCard label="Long" tone="long" stats={long} />
+      <DirectionCard label="Short" tone="short" stats={short} />
+    </div>
+  );
+}
+
+function ChartView({ data }) {
+  if (data.length < 2) {
+    return <EmptyState text="Log at least two trades to see your cumulative PNL trend." />;
+  }
+  return (
+    <div className="tj-chart-wrap">
+      <ResponsiveContainer width="100%" height={320}>
+        <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke="#2A2F3A" strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="date" stroke="#8891A3" fontSize={12} tickLine={false} axisLine={{ stroke: "#2A2F3A" }} />
+          <YAxis
+            stroke="#8891A3"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+            width={72}
+            tickFormatter={(v) => fmtMoney(v)}
+          />
+          <Tooltip
+            contentStyle={{
+              background: "#1A1E27",
+              border: "1px solid #2A2F3A",
+              borderRadius: 8,
+              fontFamily: "IBM Plex Mono, monospace",
+              fontSize: 12,
+            }}
+            labelStyle={{ color: "#8891A3" }}
+            formatter={(v) => [fmtMoney(v), "Cumulative PNL"]}
+          />
+          <Line type="monotone" dataKey="cumulative" stroke="#E8A33D" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function LogView({ trades, onEdit, onDelete, pendingDeleteId, onConfirmDelete, onCancelDelete }) {
+  const [importantOnly, setImportantOnly] = useState(false);
+  if (trades.length === 0) return <EmptyState />;
+  const visibleTrades = importantOnly ? trades.filter((t) => t.noteImportant) : trades;
+  return (
+    <div className="tj-log">
+      <div className="tj-log-toolbar">
+        <button
+          type="button"
+          className={`tj-important-toggle ${importantOnly ? "active" : ""}`}
+          onClick={() => setImportantOnly((v) => !v)}
+        >
+          <Star size={13} strokeWidth={2.4} fill={importantOnly ? "currentColor" : "none"} />
+          Important notes{importantOnly ? "" : " only"}
+        </button>
+      </div>
+      {visibleTrades.length === 0 ? (
+        <EmptyState text="No important notes marked yet — tap the ⭐ next to Note when logging a trade." />
+      ) : (
+        visibleTrades.map((t) => {
+        const roi = t.margin ? (t.pnl / t.margin) * 100 : null;
+        return (
+          <div key={t.id} className="tj-log-row">
+            <div className="tj-log-main">
+              <span className={`tj-dir-dot tj-dir-dot-${t.direction}`} title={t.direction}></span>
+              <span className="tj-mono tj-log-coin">{t.coin}</span>
+              <span className="tj-mono tj-log-date">
+                {new Date(t.datetime).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+              <span className="tj-mono tj-log-prices">
+                {fmtNum(t.entry)} → {fmtNum(t.exit)}
+              </span>
+              <span className="tj-mono tj-log-margin">margin {fmtMoney(t.margin)}</span>
+              {roi !== null && (
+                <span className={`tj-mono tj-log-roi ${roi > 0 ? "pos" : roi < 0 ? "neg" : ""}`}>
+                  {fmtPct(roi)} ROI
+                </span>
+              )}
+              <span className={`tj-mono tj-log-pnl ${t.pnl > 0 ? "pos" : t.pnl < 0 ? "neg" : ""}`}>
+                {fmtMoney(t.pnl)}
+              </span>
+              <span className="tj-log-actions">
+                <button className="tj-icon-btn" onClick={() => onEdit(t)} aria-label="Edit trade">
+                  <Pencil size={14} />
+                </button>
+                {pendingDeleteId === t.id ? (
+                  <>
+                    <button className="tj-icon-btn tj-confirm" onClick={() => onConfirmDelete(t.id)}>
+                      Delete?
+                    </button>
+                    <button className="tj-icon-btn" onClick={onCancelDelete} aria-label="Cancel delete">
+                      <X size={14} />
+                    </button>
+                  </>
+                ) : (
+                  <button className="tj-icon-btn" onClick={() => onDelete(t.id)} aria-label="Delete trade">
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </span>
+            </div>
+            {(t.approach || t.entryModel || t.proofLink || t.source || t.leverage || t.duration || t.closedVolume || t.maxOi || t.status) && (
+              <div className="tj-log-tags">
+                {t.source && (
+                  <span className="tj-tag tj-tag-source">
+                    {t.source === "others" ? (t.sourceOther || "Others") : SOURCE_LABELS[t.source] || t.source}
+                  </span>
+                )}
+                {t.leverage && <span className="tj-tag tj-tag-source">{t.leverage}x</span>}
+                {t.status && <span className="tj-tag">{t.status}</span>}
+                {t.duration && <span className="tj-tag">lasting {t.duration}</span>}
+                {t.closedVolume && <span className="tj-tag">closed {fmtNum(t.closedVolume)}</span>}
+                {t.maxOi && <span className="tj-tag">max OI {fmtNum(t.maxOi)}</span>}
+                {t.approach && (
+                  <span className={`tj-tag tj-tag-approach-${t.approach}`}>
+                    {t.approach === "strong" ? "Strong approach" : "Weak approach"}
+                  </span>
+                )}
+                {t.entryModel && (
+                  <span className="tj-tag tj-tag-model">{ENTRY_MODEL_LABELS[t.entryModel] || t.entryModel} entry</span>
+                )}
+                {t.proofLink && (
+                  <a className="tj-tag tj-tag-link" href={t.proofLink} target="_blank" rel="noopener noreferrer">
+                    <Link2 size={11} strokeWidth={2.2} style={{ display: "inline", verticalAlign: "-1px", marginRight: 3 }} />
+                    Proof link
+                  </a>
+                )}
+              </div>
+            )}
+            {t.screenshotUrl && (
+              <a href={t.screenshotUrl} target="_blank" rel="noopener noreferrer">
+                <img src={t.screenshotUrl} alt="Trade screenshot" className="tj-log-shot" />
+              </a>
+            )}
+            {t.note && (
+              <div className={`tj-log-note ${t.noteImportant ? "tj-log-note-important" : ""}`}>
+                {t.noteImportant && <Star size={12} strokeWidth={2.4} fill="currentColor" className="tj-log-note-star" />}
+                {t.note}
+              </div>
+            )}
+          </div>
+        );
+        })
+      )}
+    </div>
+  );
+}
+
+function PlansView({
+  coinOptions,
+  planForm,
+  setPlanForm,
+  editingPlanId,
+  planFormError,
+  onSubmit,
+  onCancelEdit,
+  plans,
+  onEdit,
+  onDelete,
+  pendingDeleteId,
+  onConfirmDelete,
+  onCancelDelete,
+}) {
+  return (
+    <div>
+      <form className="tj-ticket" onSubmit={onSubmit}>
+        <div className="tj-setup-grid">
+          <label className="tj-field">
+            <span>Date &amp; time (UTC+6)</span>
+            <input
+              type="datetime-local"
+              value={planForm.datetime}
+              onChange={(e) => setPlanForm({ ...planForm, datetime: e.target.value })}
+              required
+            />
+          </label>
+
+          <label className="tj-field">
+            <span>Coin</span>
+            <input
+              list="tj-coins-plan"
+              placeholder="BTC"
+              value={planForm.coin}
+              onChange={(e) => setPlanForm({ ...planForm, coin: e.target.value.toUpperCase() })}
+              required
+            />
+            <datalist id="tj-coins-plan">
+              {coinOptions.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+          </label>
+
+          <div className="tj-field">
+            <span>Direction</span>
+            <div className="tj-dir-toggle">
+              <button
+                type="button"
+                className={`tj-dir-btn tj-dir-long ${planForm.direction === "long" ? "active" : ""}`}
+                onClick={() => setPlanForm({ ...planForm, direction: "long" })}
+              >
+                Long
+              </button>
+              <button
+                type="button"
+                className={`tj-dir-btn tj-dir-short ${planForm.direction === "short" ? "active" : ""}`}
+                onClick={() => setPlanForm({ ...planForm, direction: "short" })}
+              >
+                Short
+              </button>
+              <button
+                type="button"
+                className={`tj-dir-btn tj-dir-think ${planForm.direction === "think" ? "active" : ""}`}
+                onClick={() => setPlanForm({ ...planForm, direction: "think" })}
+              >
+                Think
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <label className="tj-field tj-field-note" style={{ marginTop: 14 }}>
+          <span>Note</span>
+          <textarea
+            rows={3}
