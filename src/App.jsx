@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import {
   LineChart,
   Line,
@@ -12,19 +12,23 @@ import {
   Pencil,
   Trash2,
   X,
-  Mail,
-  Lock,
-  Zap,
   Flame,
   Trophy,
   Shield,
   TrendingDown,
+  TrendingUp,
   Calendar,
   Sparkles,
   ImagePlus,
   Link2,
   Loader2,
   Star,
+  ClipboardPaste,
+  ClipboardCheck,
+  Brain,
+  Target,
+  Clock3,
+  AlertTriangle,
 } from "lucide-react";
 
 const STORAGE_KEY = "trades";
@@ -51,25 +55,37 @@ function fileExt(name) {
   const m = /\.([a-zA-Z0-9]+)$/.exec(name || "");
   return m ? m[1].toLowerCase() : "png";
 }
-import { auth, db, storage } from "./firebase";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-} from "firebase/auth";
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  setDoc,
-} from "firebase/firestore";
-import {
-  ref as storageRef,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject,
-} from "firebase/storage";
+
+// ---- PREVIEW MODE: Firebase auth/storage swapped for in-memory demo data ----
+function daysAgo(n, h, m) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  d.setHours(h, m, 0, 0);
+  const pad = (x) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function buildSeedTrades() {
+  return [
+    { id: "seed-1", datetime: daysAgo(12, 9, 20), coin: "BTC", direction: "long", entry: 60250, exit: 61100, margin: 500, pnl: 42.5, note: "Session low-এ absorption ধরেছিলাম, buyer initiative স্পষ্ট ছিল", noteImportant: true, approach: "strong", entryModel: "balanced", proofLink: "", screenshotUrl: "https://placehold.co/320x200/1A1E27/E8A33D?text=BTC+Chart", source: "gg-short", sourceOther: "" },
+    { id: "seed-2", datetime: daysAgo(11, 14, 5), coin: "ETH", direction: "short", entry: 3400, exit: 3450, margin: 300, pnl: -27, note: "তাড়াহুড়ো করে ঢুকেছিলাম, retest-এর জন্য অপেক্ষা করিনি", noteImportant: true, approach: "weak", entryModel: "aggressive", proofLink: "https://example.com/chart-proof/eth-short", screenshotUrl: "", source: "binance-killer", sourceOther: "" },
+    { id: "seed-3", datetime: daysAgo(9, 10, 40), coin: "SOL", direction: "long", entry: 148, exit: 152.4, margin: 200, pnl: 30, note: "Textbook setup — clean absorption then structure break", noteImportant: false, approach: "strong", entryModel: "balanced", proofLink: "", screenshotUrl: "https://placehold.co/320x200/1A1E27/3ECF8E?text=SOL+Chart", source: "gg-short", sourceOther: "" },
+    { id: "seed-4", datetime: daysAgo(8, 16, 15), coin: "BTC", direction: "short", entry: 62000, exit: 61600, margin: 400, pnl: 16, note: "Sweep + reclaim পর pullback থেকে conservative entry", noteImportant: false, approach: "strong", entryModel: "conservative", proofLink: "", screenshotUrl: "", source: "", sourceOther: "" },
+    { id: "seed-5", datetime: daysAgo(6, 11, 0), coin: "JUP", direction: "long", entry: 0.82, exit: 0.79, margin: 250, pnl: -18, note: "সাইজ বেশি নিয়ে ফেলেছিলাম, মাথা ঠান্ডা ছিল না", noteImportant: true, approach: "weak", entryModel: "aggressive", proofLink: "", screenshotUrl: "", source: "others", sourceOther: "Twitter call" },
+    { id: "seed-6", datetime: daysAgo(5, 9, 50), coin: "ETH", direction: "long", entry: 3300, exit: 3410, margin: 350, pnl: 38.5, note: "Absorption-এর পর buyer imbalance স্পষ্ট ছিল", noteImportant: false, approach: "strong", entryModel: "balanced", proofLink: "https://example.com/chart-proof/eth-long", screenshotUrl: "", source: "gg-short", sourceOther: "" },
+    { id: "seed-7", datetime: daysAgo(4, 13, 25), coin: "BNB", direction: "short", entry: 590, exit: 601, margin: 300, pnl: -22, note: "Weak approach ছিল, বুঝেও early ঢুকে গেছিলাম", noteImportant: true, approach: "weak", entryModel: "aggressive", proofLink: "", screenshotUrl: "", source: "binance-killer", sourceOther: "" },
+    { id: "seed-8", datetime: daysAgo(2, 10, 5), coin: "BTC", direction: "long", entry: 63100, exit: 64050, margin: 500, pnl: 47.5, note: "Clean model B entry, full checklist মিলেছিল", noteImportant: false, approach: "strong", entryModel: "balanced", proofLink: "", screenshotUrl: "https://placehold.co/320x200/1A1E27/E8A33D?text=BTC+Chart+2", source: "gg-short", sourceOther: "" },
+    { id: "seed-9", datetime: daysAgo(1, 15, 40), coin: "SOL", direction: "short", entry: 155, exit: 157, margin: 200, pnl: -13, note: "শুধু divergence দেখে ঢুকেছিলাম, structure shift confirm হয়নি", noteImportant: false, approach: "weak", entryModel: "aggressive", proofLink: "", screenshotUrl: "", source: "binance-killer", sourceOther: "" },
+    { id: "seed-10", datetime: daysAgo(0, 9, 10), coin: "BTC", direction: "long", entry: 64200, exit: 64980, margin: 500, pnl: 39, note: "Sweep + reclaim + retest hold, conservative model", noteImportant: false, approach: "strong", entryModel: "conservative", proofLink: "", screenshotUrl: "", source: "gg-short", sourceOther: "" },
+  ];
+}
+
+function buildSeedPlans() {
+  return [
+    { id: "plan-seed-1", datetime: nowUTC6Input(), coin: "BTC", direction: "long", note: "62,000 VPOC-এ retest হয়ে হোল্ড করলে long — গতকালের absorption zone, আগে থেকে shortlist করা।" },
+    { id: "plan-seed-2", datetime: nowUTC6Input(), coin: "ETH", direction: "short", note: "3,450 resistance-এ rejection candle confirm হলে short — 4H-তে weak approach, বেশি expect করছি না, ছোট size।" },
+  ];
+}
 
 function nowLocalInput() {
   const d = new Date();
@@ -265,7 +281,81 @@ const emptyForm = () => ({
   screenshotUrl: "",
   source: "",
   sourceOther: "",
+  leverage: "",
+  maxOi: "",
+  closedVolume: "",
+  duration: "",
+  openedAt: "",
+  closedAt: "",
+  status: "",
+  contract: "",
 });
+
+function parseBinancePositionHistory(raw) {
+  const text = String(raw || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s+/g, "\n")
+    .trim();
+  const valueAfter = (label) => {
+    const match = text.match(new RegExp(`${label}\\s*\\n?\\s*([^\\n]+)`, "i"));
+    return match ? match[1].trim() : "";
+  };
+  const cleanNumber = (value) => {
+    const match = String(value || "").replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+    return match ? match[0] : "";
+  };
+  const dateToInput = (value) => {
+    const match = String(value || "").match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
+    return match ? `${match[3]}-${match[1]}-${match[2]}T${match[4]}:${match[5]}` : "";
+  };
+  const firstLine = text.split("\n").map((line) => line.trim()).filter(Boolean)[0] || "";
+  const coinMatch = firstLine.match(/^([A-Z0-9]+?)(?:USDT|USD|BUSD)?\s*$/i);
+  const coin = (coinMatch ? coinMatch[1] : firstLine.replace(/USDT$/i, "")).toUpperCase();
+  const directionMatch = text.match(/\b(Cross|Isolated)\s+(Long|Short)\b/i);
+  const openedRaw = text.match(/Opened\s*\n?\s*(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})/i)?.[1] || "";
+  const closedRaw = text.match(/Closed\s*\n?\s*(\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2})/i)?.[1] || "";
+  const roi = cleanNumber(valueAfter("ROI"));
+  const pnl = cleanNumber(valueAfter("Realized PNL \\(USDT\\)"));
+  const entry = cleanNumber(valueAfter("Entry Price"));
+  const exit = cleanNumber(valueAfter("Avg\\. Close Price"));
+  const closedVolume = cleanNumber(valueAfter("Closed Vol\\. \\([^\\n]+\\)"));
+  const maxOi = cleanNumber(valueAfter("Max OI \\([^\\n]+\\)"));
+  const leverage = cleanNumber(text.match(/(\d+(?:\.\d+)?)x/i)?.[1]);
+  const duration = text.match(/\(Lasting\s+([^)]+)\)/i)?.[1] || "";
+  const status = text.match(/\b(Open|Closed)\b(?=\s*\n|\s+\d{2}\/)/i)?.[1] || "";
+  const openedAt = dateToInput(openedRaw);
+  const closedAt = dateToInput(closedRaw);
+  return {
+    ...emptyForm(),
+    coin,
+    contract: firstLine,
+    direction: directionMatch?.[2]?.toLowerCase() || "long",
+    entry,
+    exit,
+    roi,
+    pnl,
+    margin: roi && pnl ? String((parseFloat(pnl) / (parseFloat(roi) / 100)).toFixed(2)) : "",
+    datetime: closedAt || openedAt || nowLocalInput(),
+    note: [
+      leverage ? `${leverage}x leverage` : "",
+      duration ? `lasting ${duration}` : "",
+      closedVolume ? `closed ${closedVolume} ${coin}` : "",
+      maxOi ? `max OI ${maxOi} ${coin}` : "",
+    ].filter(Boolean).join(" · "),
+    leverage,
+    maxOi,
+    closedVolume,
+    duration,
+    openedAt,
+    closedAt,
+    status,
+    source: "others",
+    sourceOther: "Binance Position History",
+  };
+}
 
 const emptyPlanForm = () => ({
   datetime: nowUTC6Input(),
@@ -275,15 +365,8 @@ const emptyPlanForm = () => ({
 });
 
 export default function TradeJournal() {
-  const [trades, setTrades] = useState([]);
-  const [plans, setPlans] = useState([]);
-  const [loaded, setLoaded] = useState(false);
-  const [user, setUser] = useState(null);
-  const [authReady, setAuthReady] = useState(false);
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [loggingIn, setLoggingIn] = useState(false);
+  const [trades, setTrades] = useState(buildSeedTrades());
+  const [plans, setPlans] = useState(buildSeedPlans());
   const [activeTab, setActiveTab] = useState("dashboard");
   const [form, setForm] = useState(emptyForm());
   const [editingId, setEditingId] = useState(null);
@@ -298,129 +381,15 @@ export default function TradeJournal() {
   const [editingPlanId, setEditingPlanId] = useState(null);
   const [planFormError, setPlanFormError] = useState("");
   const [pendingDeletePlanId, setPendingDeletePlanId] = useState(null);
+  const [binancePaste, setBinancePaste] = useState("");
+  const [binanceImported, setBinanceImported] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthReady(true);
-      setLoaded(false);
-      setTrades([]);
-      setPlans([]);
-    });
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    if (!authReady || !user) {
-      if (authReady && !user) setLoaded(true);
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const [tradesSnap, plansSnap] = await Promise.all([
-          getDocs(collection(db, "users", user.uid, "trades")),
-          getDocs(collection(db, "users", user.uid, "plans")),
-        ]);
-        const loadedTrades = tradesSnap.docs.map((item) => ({
-          id: item.id,
-          ...item.data(),
-        }));
-        loadedTrades.sort(
-          (a, b) => new Date(b.datetime) - new Date(a.datetime)
-        );
-        const loadedPlans = plansSnap.docs.map((item) => ({
-          id: item.id,
-          ...item.data(),
-        }));
-        loadedPlans.sort(
-          (a, b) => new Date(b.datetime) - new Date(a.datetime)
-        );
-        if (!cancelled) {
-          setTrades(loadedTrades);
-          setPlans(loadedPlans);
-        }
-      } catch (e) {
-        console.error("Failed to load journal", e);
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authReady, user]);
-
-  async function persist(next) {
-    if (!user) return;
+  function persist(next) {
     setTrades(next);
-    try {
-      const existing = new Set(next.map((trade) => trade.id));
-      const snapshot = await getDocs(
-        collection(db, "users", user.uid, "trades")
-      );
-
-      await Promise.all(
-        snapshot.docs
-          .filter((item) => !existing.has(item.id))
-          .map((item) => deleteDoc(item.ref))
-      );
-
-      await Promise.all(
-        next.map((trade) =>
-          setDoc(doc(db, "users", user.uid, "trades", trade.id), trade)
-        )
-      );
-    } catch (e) {
-      console.error("Failed to save journal", e);
-      setFormError("Could not save to Firebase. Please try again.");
-    }
   }
 
-  async function persistPlans(next) {
-    if (!user) return;
+  function persistPlans(next) {
     setPlans(next);
-    try {
-      const existing = new Set(next.map((plan) => plan.id));
-      const snapshot = await getDocs(
-        collection(db, "users", user.uid, "plans")
-      );
-
-      await Promise.all(
-        snapshot.docs
-          .filter((item) => !existing.has(item.id))
-          .map((item) => deleteDoc(item.ref))
-      );
-
-      await Promise.all(
-        next.map((plan) =>
-          setDoc(doc(db, "users", user.uid, "plans", plan.id), plan)
-        )
-      );
-    } catch (e) {
-      console.error("Failed to save plans", e);
-      setPlanFormError("Could not save to Firebase. Please try again.");
-    }
-  }
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    setLoginError("");
-    setLoggingIn(true);
-    try {
-      await signInWithEmailAndPassword(
-        auth,
-        loginEmail.trim(),
-        loginPassword
-      );
-      setLoginPassword("");
-    } catch (e) {
-      setLoginError("Login failed. Check your email and password.");
-    } finally {
-      setLoggingIn(false);
-    }
   }
 
   function handleScreenshotChange(e) {
@@ -431,17 +400,23 @@ export default function TradeJournal() {
     setFormError("");
   }
 
-  async function removeScreenshot() {
-    if (form.screenshotUrl) {
-      try {
-        await deleteObject(storageRef(storage, form.screenshotUrl));
-      } catch (e) {
-        // best-effort — file may already be gone, or URL wasn't a storage ref
-      }
-    }
+  function removeScreenshot() {
     setScreenshotFile(null);
     setScreenshotPreview("");
     setForm((f) => ({ ...f, screenshotUrl: "" }));
+  }
+
+  function importBinanceTrade() {
+    const parsed = parseBinancePositionHistory(binancePaste);
+    if (!parsed.coin || !parsed.entry || !parsed.exit || !parsed.pnl || !parsed.roi) {
+      setFormError("Binance text incomplete. Copy the full position-history block, including PNL, ROI, Entry Price and Avg. Close Price.");
+      setBinanceImported(false);
+      return;
+    }
+    setForm(parsed);
+    setBinanceImported(true);
+    setFormError("");
+    setTimeout(() => setBinanceImported(false), 2200);
   }
 
   async function handleSubmit(e) {
@@ -478,18 +453,11 @@ export default function TradeJournal() {
     let screenshotUrl = form.screenshotUrl;
 
     if (screenshotFile) {
+      // Preview mode: no real Firebase Storage — just simulate an upload delay
+      // and use the local object URL as a stand-in for the hosted download URL.
       setUploadingShot(true);
-      try {
-        const path = `trade-screenshots/${user.uid}/${tradeId}.${fileExt(screenshotFile.name)}`;
-        const fileRef = storageRef(storage, path);
-        await uploadBytes(fileRef, screenshotFile);
-        screenshotUrl = await getDownloadURL(fileRef);
-      } catch (e) {
-        console.error("Screenshot upload failed", e);
-        setUploadingShot(false);
-        setFormError("Screenshot upload failed. Check Firebase Storage setup and try again.");
-        return;
-      }
+      await new Promise((res) => setTimeout(res, 500));
+      screenshotUrl = screenshotPreview;
       setUploadingShot(false);
     }
 
@@ -510,6 +478,14 @@ export default function TradeJournal() {
       screenshotUrl,
       source: form.source,
       sourceOther: form.source === "others" ? form.sourceOther.trim() : "",
+      leverage: form.leverage ? parseFloat(form.leverage) : null,
+      maxOi: form.maxOi ? parseFloat(form.maxOi) : null,
+      closedVolume: form.closedVolume ? parseFloat(form.closedVolume) : null,
+      duration: form.duration || "",
+      openedAt: form.openedAt || "",
+      closedAt: form.closedAt || "",
+      status: form.status || "",
+      contract: form.contract || "",
     };
     const wasEditing = Boolean(editingId);
     const xp = 10 + (form.approach ? 2 : 0) + (form.entryModel ? 2 : 0) + (form.source ? 2 : 0) + (form.proofLink.trim() || screenshotUrl ? 3 : 0);
@@ -544,6 +520,14 @@ export default function TradeJournal() {
       screenshotUrl: t.screenshotUrl || "",
       source: t.source || "",
       sourceOther: t.sourceOther || "",
+      leverage: t.leverage == null ? "" : String(t.leverage),
+      maxOi: t.maxOi == null ? "" : String(t.maxOi),
+      closedVolume: t.closedVolume == null ? "" : String(t.closedVolume),
+      duration: t.duration || "",
+      openedAt: t.openedAt || "",
+      closedAt: t.closedAt || "",
+      status: t.status || "",
+      contract: t.contract || "",
     });
     setScreenshotFile(null);
     setScreenshotPreview(t.screenshotUrl || "");
@@ -560,6 +544,19 @@ export default function TradeJournal() {
     setFormError("");
   }
 
+  function openTradePlan() {
+    setPlanForm({
+      datetime: form.datetime || nowUTC6Input(),
+      coin: form.coin || "",
+      direction: form.direction || "long",
+      note: form.note || "",
+    });
+    setEditingPlanId(null);
+    setPlanFormError("");
+    setActiveTab("plans");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function toggleSingle(field, value) {
     setForm((f) => ({ ...f, [field]: f[field] === value ? "" : value }));
   }
@@ -568,11 +565,7 @@ export default function TradeJournal() {
     setPendingDeleteId(id);
   }
   function confirmDelete(id) {
-    const target = trades.find((t) => t.id === id);
     persist(trades.filter((t) => t.id !== id));
-    if (target && target.screenshotUrl) {
-      deleteObject(storageRef(storage, target.screenshotUrl)).catch(() => {});
-    }
     if (editingId === id) cancelEdit();
     setPendingDeleteId(null);
   }
@@ -641,7 +634,12 @@ export default function TradeJournal() {
     const losses = trades.filter((t) => t.pnl < 0).length;
     const winRate = total ? (wins / total) * 100 : 0;
     const avgPnl = total ? totalPnl / total : 0;
-    return { total, totalPnl, totalMargin, wins, losses, winRate, avgPnl };
+    const grossProfit = trades.filter((t) => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
+    const grossLoss = Math.abs(trades.filter((t) => t.pnl < 0).reduce((s, t) => s + t.pnl, 0));
+    const avgWin = wins ? grossProfit / wins : 0;
+    const avgLoss = losses ? grossLoss / losses : 0;
+    const profitFactor = grossLoss ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : null;
+    return { total, totalPnl, totalMargin, wins, losses, winRate, avgPnl, avgWin, avgLoss, profitFactor };
   }, [trades]);
 
   // Date-range filter — applies to every analytics view below (dashboard,
@@ -709,7 +707,12 @@ export default function TradeJournal() {
     const losses = filteredTrades.filter((t) => t.pnl < 0).length;
     const winRate = total ? (wins / total) * 100 : 0;
     const avgPnl = total ? totalPnl / total : 0;
-    return { total, totalPnl, totalMargin, wins, losses, winRate, avgPnl };
+    const grossProfit = filteredTrades.filter((t) => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
+    const grossLoss = Math.abs(filteredTrades.filter((t) => t.pnl < 0).reduce((s, t) => s + t.pnl, 0));
+    const avgWin = wins ? grossProfit / wins : 0;
+    const avgLoss = losses ? grossLoss / losses : 0;
+    const profitFactor = grossLoss ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : null;
+    return { total, totalPnl, totalMargin, wins, losses, winRate, avgPnl, avgWin, avgLoss, profitFactor };
   }, [filteredTrades]);
 
   const traderRank = useMemo(() => getTraderRank(stats.total), [stats.total]);
@@ -884,6 +887,44 @@ export default function TradeJournal() {
     return SOURCE_OPTIONS.map((s) => ({ id: s.id, label: s.label, ...build(s.id) }));
   }, [filteredTrades]);
 
+  const reviewSignals = useMemo(() => {
+    const strong = filteredTrades.filter((t) => t.approach === "strong");
+    const weak = filteredTrades.filter((t) => t.approach === "weak");
+    const highLeverage = filteredTrades.filter((t) => Number(t.leverage) >= 10);
+    const groupBy = (items, key) => {
+      const groups = new Map();
+      items.forEach((t) => {
+        const label = t[key] || "Unlabeled";
+        if (!groups.has(label)) groups.set(label, []);
+        groups.get(label).push(t);
+      });
+      return Array.from(groups.entries()).map(([label, rows]) => ({
+        label,
+        trades: rows.length,
+        pnl: rows.reduce((s, t) => s + t.pnl, 0),
+        winRate: rows.length ? (rows.filter((t) => t.pnl > 0).length / rows.length) * 100 : 0,
+      })).sort((a, b) => b.pnl - a.pnl);
+    };
+    const models = groupBy(filteredTrades, "entryModel").filter((x) => x.label !== "Unlabeled");
+    const bestModel = models[0];
+    const focus = [];
+    const strengths = [];
+    if (strong.length && weak.length) {
+      const strongPnl = strong.reduce((s, t) => s + t.pnl, 0);
+      const weakPnl = weak.reduce((s, t) => s + t.pnl, 0);
+      if (strongPnl > weakPnl) strengths.push(`Strong approach is outperforming weak approach by ${fmtMoney(strongPnl - weakPnl)}.`);
+      if (weakPnl < 0) focus.push(`Weak-approach trades cost ${fmtMoney(Math.abs(weakPnl))}. Wait for confirmation before entering.`);
+    }
+    if (bestModel) strengths.push(`${ENTRY_MODEL_LABELS[bestModel.label] || bestModel.label} is your best tagged model at ${fmtPct(bestModel.winRate)} win rate.`);
+    if (highLeverage.length) {
+      const highLevPnl = highLeverage.reduce((s, t) => s + t.pnl, 0);
+      focus.push(`${highLeverage.length} trade${highLeverage.length === 1 ? "" : "s"} used 10x+ leverage (${fmtMoney(highLevPnl)} net). Review whether size matched conviction.`);
+    }
+    if (!strengths.length) strengths.push("Tag your approach and entry model to unlock pattern-level coaching.");
+    if (!focus.length) focus.push("No major risk flag yet. Keep logging the reason and rule adherence for every trade.");
+    return { strengths, focus };
+  }, [filteredTrades]);
+
   const chartData = useMemo(() => {
     const sorted = [...filteredTrades].sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
     let running = 0;
@@ -923,7 +964,7 @@ export default function TradeJournal() {
   }
 
   const tabs = [
-    { id: "plans", label: "Entry Plans" },
+    { id: "plans", label: "Trade plan" },
     { id: "dashboard", label: "Dashboard" },
     { id: "weekly", label: "Weekly" },
     { id: "coins", label: "Coins" },
@@ -932,201 +973,6 @@ export default function TradeJournal() {
     { id: "chart", label: "Chart" },
     { id: "log", label: "Log" },
   ];
-
-  if (!authReady) {
-    return (
-      <div className="tj-app tj-loading">
-        <style>{css}</style>
-        <span className="tj-mono">Connecting to Firebase…</span>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="tj-app tj-auth-screen">
-        <style>{css}</style>
-
-        {/* Ambient backdrop: night sky, drifting embers, distant waves */}
-        <div className="tj-auth-bg" aria-hidden="true">
-          <div className="tj-auth-glow tj-auth-glow-a" />
-          <div className="tj-auth-glow tj-auth-glow-b" />
-          <div className="tj-auth-stars" />
-          <div className="tj-auth-embers">
-            {Array.from({ length: 14 }).map((_, i) => (
-              <span
-                key={i}
-                className="tj-ember"
-                style={{
-                  left: `${(i * 71 + 9) % 100}%`,
-                  animationDelay: `${(i % 7) * 0.85}s`,
-                  animationDuration: `${8 + (i % 5)}s`,
-                  "--c":
-                    i % 3 === 0
-                      ? "var(--accent)"
-                      : i % 3 === 1
-                      ? "var(--mana)"
-                      : "var(--pos)",
-                }}
-              />
-            ))}
-          </div>
-          <div className="tj-auth-waves">
-            <svg className="tj-wave tj-wave-back" viewBox="0 0 2400 200" preserveAspectRatio="none">
-              <path d="M0,110 C150,60 300,150 450,110 C600,70 750,150 900,110 C1050,70 1200,150 1350,110 C1500,70 1650,150 1800,110 C1950,70 2100,150 2250,110 L2400,110 L2400,200 L0,200 Z" />
-            </svg>
-            <svg className="tj-wave tj-wave-front" viewBox="0 0 2400 200" preserveAspectRatio="none">
-              <path d="M0,140 C180,90 320,170 500,140 C680,110 820,180 1000,140 C1180,100 1320,170 1500,140 C1680,110 1820,180 2000,140 C2180,100 2320,170 2400,150 L2400,200 L0,200 Z" />
-            </svg>
-          </div>
-        </div>
-
-        <div className="tj-auth-stage">
-          <div className="tj-auth-panel">
-            {/* Summoning circle behind the terminal */}
-            <svg className="tj-auth-circle" viewBox="0 0 400 400" aria-hidden="true">
-              <defs>
-                <radialGradient id="tjAuthGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="var(--mana)" stopOpacity="0.35" />
-                  <stop offset="100%" stopColor="var(--mana)" stopOpacity="0" />
-                </radialGradient>
-              </defs>
-              <circle cx="200" cy="200" r="150" fill="url(#tjAuthGlow)" />
-              <g className="tj-circle-ring tj-circle-ring-outer">
-                <circle cx="200" cy="200" r="178" fill="none" stroke="var(--mana)" strokeWidth="1" strokeDasharray="1 9" opacity="0.55" />
-              </g>
-              <g className="tj-circle-ring tj-circle-ring-mid">
-                <circle cx="200" cy="200" r="148" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeDasharray="20 14" opacity="0.4" />
-                <rect x="-6" y="-6" width="12" height="12" transform="translate(200,22) rotate(45)" fill="var(--accent)" opacity="0.6" />
-                <rect x="-6" y="-6" width="12" height="12" transform="translate(378,200) rotate(45)" fill="var(--accent)" opacity="0.6" />
-                <rect x="-6" y="-6" width="12" height="12" transform="translate(200,378) rotate(45)" fill="var(--accent)" opacity="0.6" />
-                <rect x="-6" y="-6" width="12" height="12" transform="translate(22,200) rotate(45)" fill="var(--accent)" opacity="0.6" />
-              </g>
-              <g className="tj-circle-ring tj-circle-ring-inner">
-                <circle cx="200" cy="200" r="118" fill="none" stroke="var(--mana)" strokeWidth="1" opacity="0.5" />
-              </g>
-              <g className="tj-circle-spark">
-                <circle cx="200" cy="22" r="3.5" fill="var(--accent)" />
-              </g>
-            </svg>
-
-            <form className="tj-auth-card" onSubmit={handleLogin}>
-              <span className="tj-auth-corner tj-auth-corner-tl" />
-              <span className="tj-auth-corner tj-auth-corner-tr" />
-              <span className="tj-auth-corner tj-auth-corner-bl" />
-              <span className="tj-auth-corner tj-auth-corner-br" />
-
-              <div className="tj-auth-eyebrow tj-mono">
-                <span className="tj-auth-eyebrow-dot" />
-                Trader Guild · Access Terminal
-              </div>
-
-              <h1 className="tj-display tj-auth-title">Trade Journal</h1>
-              <p className="tj-auth-tagline">
-                Chart the seas, hunt the gains, and level up every trade.
-              </p>
-
-              <label className="tj-auth-field">
-                <span className="tj-auth-label">
-                  <Mail size={13} strokeWidth={2.2} />
-                  Email
-                </span>
-                <div className="tj-auth-input-wrap">
-                  <input
-                    type="email"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    autoComplete="email"
-                    placeholder="you@guild.com"
-                    required
-                  />
-                  <span className="tj-auth-input-glow" />
-                </div>
-              </label>
-
-              <label className="tj-auth-field">
-                <span className="tj-auth-label">
-                  <Lock size={13} strokeWidth={2.2} />
-                  Password
-                </span>
-                <div className="tj-auth-input-wrap">
-                  <input
-                    type="password"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    autoComplete="current-password"
-                    placeholder="••••••••"
-                    required
-                  />
-                  <span className="tj-auth-input-glow" />
-                </div>
-              </label>
-
-              {loginError && (
-                <div className="tj-auth-error" role="alert">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
-                    <path d="M12 3 L22 20 L2 20 Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-                    <line x1="12" y1="9" x2="12" y2="14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    <circle cx="12" cy="17" r="1" fill="currentColor" />
-                  </svg>
-                  {loginError}
-                </div>
-              )}
-
-              <button type="submit" className="tj-auth-btn" disabled={loggingIn}>
-                <span className="tj-auth-btn-shine" />
-                {loggingIn ? (
-                  <span className="tj-auth-btn-content">
-                    <span className="tj-auth-spinner" />
-                    Opening the gate…
-                  </span>
-                ) : (
-                  <span className="tj-auth-btn-content">
-                    <Zap size={16} strokeWidth={2.4} />
-                    Enter the Guild
-                  </span>
-                )}
-              </button>
-
-              <p className="tj-auth-footnote">Your journal, secured &amp; synced.</p>
-            </form>
-          </div>
-
-          <div
-            className={`tj-auth-slime ${loggingIn ? "tj-auth-slime-cheer" : ""} ${
-              loginError ? "tj-auth-slime-sad" : ""
-            }`}
-            aria-hidden="true"
-          >
-            <svg viewBox="0 0 120 96">
-              <ellipse className="tj-slime-shadow" cx="60" cy="90" rx="34" ry="5" />
-              <path
-                className="tj-slime-body"
-                d="M60,10 C82,10 100,32 100,54 C100,76 82,90 60,90 C38,90 20,76 20,54 C20,32 38,10 60,10 Z"
-              />
-              <ellipse className="tj-slime-shine" cx="42" cy="34" rx="9" ry="6" />
-              <g className="tj-slime-eyes">
-                <ellipse cx="48" cy="52" rx="4" ry="5.5" fill="#12141A" />
-                <ellipse cx="74" cy="52" rx="4" ry="5.5" fill="#12141A" />
-              </g>
-              <path className="tj-slime-mouth" d="M52,64 Q61,70 70,64" stroke="#12141A" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-              <ellipse cx="40" cy="60" rx="4.5" ry="3" className="tj-slime-blush" />
-              <ellipse cx="82" cy="60" rx="4.5" ry="3" className="tj-slime-blush" />
-            </svg>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!loaded) {
-    return (
-      <div className="tj-app tj-loading">
-        <style>{css}</style>
-        <span className="tj-mono">Loading journal…</span>
-      </div>
-    );
-  }
 
   const ticketMood = ticketMoodFor(form);
 
@@ -1142,16 +988,16 @@ export default function TradeJournal() {
           </p>
         </div>
         <div className="tj-header-actions">
+          <span className="tj-tag tj-tag-level">Preview · demo data (not saved)</span>
           <button
             type="button"
             className="tj-link-btn tj-muted"
-            onClick={() => signOut(auth)}
+            onClick={() => { setTrades(buildSeedTrades()); setPlans(buildSeedPlans()); }}
           >
-            Sign out
+            Reset demo data
           </button>
         </div>
       </header>
-
       <form className="tj-ticket" onSubmit={handleSubmit}>
         <TicketMascot mood={ticketMood.state} line={ticketMood.line} celebrating={celebration.show} />
         {celebration.show && (
@@ -1170,6 +1016,29 @@ export default function TradeJournal() {
           <span className="tj-mono tj-ticket-date">
             {new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
           </span>
+        </div>
+
+        <div className="tj-binance-import">
+          <div className="tj-import-heading">
+            <div>
+              <strong><ClipboardPaste size={15} /> Quick import from Binance</strong>
+              <span>Paste one closed position. The journal will extract the context that matters for review.</span>
+            </div>
+            {binanceImported && <span className="tj-import-success"><ClipboardCheck size={14} /> Fields filled</span>}
+          </div>
+          <textarea
+            className="tj-import-textarea"
+            value={binancePaste}
+            onChange={(e) => setBinancePaste(e.target.value)}
+            placeholder={"ATOMUSDT\nPerp\n15x\nCross Long\n…paste the full Binance position-history block"}
+            aria-label="Paste Binance position history"
+          />
+          <div className="tj-import-actions">
+            <button type="button" className="tj-btn-import" onClick={importBinanceTrade} disabled={!binancePaste.trim()}>
+              <ClipboardPaste size={15} /> Parse &amp; fill trade
+            </button>
+            <span className="tj-import-hint">Prices · PNL · ROI · dates · leverage · volume · duration · Max OI</span>
+          </div>
         </div>
 
         <div className="tj-ticket-fields">
@@ -1301,9 +1170,7 @@ export default function TradeJournal() {
           </div>
 
           <label className="tj-field tj-field-note">
-            <span>
-              Note <em className="tj-optional">optional</em>
-            </span>
+            <span>Note (optional)</span>
             <div className="tj-note-row">
               <input
                 type="text"
@@ -1442,6 +1309,9 @@ export default function TradeJournal() {
 
         <div className="tj-ticket-actions">
           {formError && <span className="tj-form-error">{formError}</span>}
+          <button type="button" className="tj-btn-plan" onClick={openTradePlan}>
+            <Calendar size={14} strokeWidth={2.2} /> Trade plan
+          </button>
           {editingId && (
             <button type="button" className="tj-btn-secondary" onClick={cancelEdit}>
               Cancel
@@ -1528,6 +1398,7 @@ export default function TradeJournal() {
             rank={traderRank}
             milestoneHit={milestoneHit}
             insights={insights}
+            reviewSignals={reviewSignals}
             isFiltered={isFiltered}
             rangeLabel={rangeLabel}
           />
@@ -1620,7 +1491,7 @@ function RankBadge({ level, progress }) {
   );
 }
 
-function DashboardView({ stats, filteredStats, rank, milestoneHit, insights, isFiltered, rangeLabel }) {
+function DashboardView({ stats, filteredStats, rank, milestoneHit, insights, reviewSignals, isFiltered, rangeLabel }) {
   const noDataAtAll = stats.total === 0;
   const noDataInRange = !noDataAtAll && filteredStats.total === 0;
 
@@ -1666,6 +1537,20 @@ function DashboardView({ stats, filteredStats, rank, milestoneHit, insights, isF
           value={fmtMoney(filteredStats.avgPnl)}
           tone={filteredStats.avgPnl > 0 ? "pos" : filteredStats.avgPnl < 0 ? "neg" : ""}
         />
+        <StatCard
+          icon={Target}
+          label="Profit factor"
+          value={
+            filteredStats.profitFactor === null
+              ? "—"
+              : filteredStats.profitFactor === Infinity
+              ? "∞"
+              : filteredStats.profitFactor.toFixed(2)
+          }
+          tone={filteredStats.profitFactor >= 1.5 ? "pos" : filteredStats.profitFactor !== null && filteredStats.profitFactor < 1 ? "neg" : ""}
+        />
+        <StatCard icon={TrendingUp} label="Avg winner" value={fmtMoney(filteredStats.avgWin)} tone="pos" />
+        <StatCard icon={TrendingDown} label="Avg loser" value={fmtMoney(-Math.abs(filteredStats.avgLoss))} tone="neg" />
       </div>
 
       {!noDataAtAll && !noDataInRange && (
@@ -1718,6 +1603,16 @@ function DashboardView({ stats, filteredStats, rank, milestoneHit, insights, isF
               value={insights.worst ? `${insights.worst.coin} ${fmtMoney(insights.worst.pnl)}` : "—"}
               tone="neg"
             />
+          </div>
+          <div className="tj-coach-grid">
+            <div className="tj-coach-card tj-coach-strength">
+              <div className="tj-coach-heading"><Brain size={15} /> What is working</div>
+              {reviewSignals.strengths.map((line, index) => <p key={index}>{line}</p>)}
+            </div>
+            <div className="tj-coach-card tj-coach-focus">
+              <div className="tj-coach-heading"><AlertTriangle size={15} /> What to improve</div>
+              {reviewSignals.focus.map((line, index) => <p key={index}>{line}</p>)}
+            </div>
           </div>
         </>
       )}
@@ -1978,13 +1873,18 @@ function LogView({ trades, onEdit, onDelete, pendingDeleteId, onConfirmDelete, o
                 )}
               </span>
             </div>
-            {(t.approach || t.entryModel || t.proofLink || t.source) && (
+            {(t.approach || t.entryModel || t.proofLink || t.source || t.leverage || t.duration || t.closedVolume || t.maxOi || t.status) && (
               <div className="tj-log-tags">
                 {t.source && (
                   <span className="tj-tag tj-tag-source">
                     {t.source === "others" ? (t.sourceOther || "Others") : SOURCE_LABELS[t.source] || t.source}
                   </span>
                 )}
+                {t.leverage && <span className="tj-tag tj-tag-source">{t.leverage}x</span>}
+                {t.status && <span className="tj-tag">{t.status}</span>}
+                {t.duration && <span className="tj-tag">lasting {t.duration}</span>}
+                {t.closedVolume && <span className="tj-tag">closed {fmtNum(t.closedVolume)}</span>}
+                {t.maxOi && <span className="tj-tag">max OI {fmtNum(t.maxOi)}</span>}
                 {t.approach && (
                   <span className={`tj-tag tj-tag-approach-${t.approach}`}>
                     {t.approach === "strong" ? "Strong approach" : "Weak approach"}
@@ -2096,8 +1996,7 @@ function PlansView({
         <label className="tj-field tj-field-note" style={{ marginTop: 14 }}>
           <span>Note</span>
           <textarea
-            rows={3}
-            placeholder="What's the plan, and why — level, context, the trigger you're waiting for"
+            rows={3}            placeholder="What's the plan, and why — level, context, the trigger you're waiting for"
             value={planForm.note}
             onChange={(e) => setPlanForm({ ...planForm, note: e.target.value })}
           />
@@ -2845,10 +2744,51 @@ const css = `
 .tj-note-star.active { background: rgba(232,163,61,0.18); border-color: var(--accent); color: var(--accent); }
 .tj-note-star:active { transform: scale(0.9); }
 
+.tj-binance-import {
+  margin: 0 22px 18px; padding: 14px; border: 1px solid rgba(124,108,255,0.28);
+  border-radius: 12px; background: linear-gradient(135deg, rgba(124,108,255,0.09), rgba(124,108,255,0.03));
+}
+.tj-btn-plan {
+  display:inline-flex; align-items:center; gap:6px; border:1px solid rgba(124,108,255,0.45);
+  background:rgba(124,108,255,0.10); color:#bcb7ff; border-radius:8px; padding:8px 11px;
+  font:600 12px 'Space Grotesk',sans-serif; cursor:pointer;
+}
+.tj-btn-plan:hover { border-color:var(--mana); background:rgba(124,108,255,0.18); }
+.tj-import-heading { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:10px; }
+.tj-import-heading strong { display:flex; align-items:center; gap:7px; font-family:'Space Grotesk',sans-serif; font-size:13px; }
+.tj-import-heading > div > span { display:block; margin-top:4px; color:var(--text-muted); font-size:11px; }
+.tj-import-success { display:flex; align-items:center; gap:5px; color:var(--pos); font-size:12px; font-weight:600; white-space:nowrap; }
+.tj-import-textarea {
+  width:100%; min-height:82px; resize:vertical; box-sizing:border-box; padding:10px 11px;
+  border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text);
+  font:12px/1.5 'JetBrains Mono',monospace;
+}
+.tj-import-textarea:focus { outline:none; border-color:var(--mana); box-shadow:0 0 0 3px rgba(124,108,255,0.1); }
+.tj-import-actions { display:flex; align-items:center; gap:10px; margin-top:9px; flex-wrap:wrap; }
+.tj-btn-import {
+  display:inline-flex; align-items:center; gap:7px; border:1px solid rgba(124,108,255,0.5);
+  background:var(--mana); color:white; border-radius:8px; padding:8px 12px; font:600 12px 'Space Grotesk',sans-serif; cursor:pointer;
+}
+.tj-btn-import:hover { filter:brightness(1.08); }
+.tj-btn-import:disabled { opacity:.45; cursor:not-allowed; }
+.tj-import-hint { color:var(--text-muted); font-size:11px; }
+
+.tj-coach-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:16px; }
+.tj-coach-card { border-radius:12px; padding:14px 16px; border:1px solid var(--border); background:var(--surface); }
+.tj-coach-strength { border-color:rgba(62,207,142,.3); background:rgba(62,207,142,.05); }
+.tj-coach-focus { border-color:rgba(242,84,91,.3); background:rgba(242,84,91,.05); }
+.tj-coach-heading { display:flex; align-items:center; gap:7px; font-weight:700; font-size:12px; margin-bottom:8px; }
+.tj-coach-strength .tj-coach-heading { color:var(--pos); }
+.tj-coach-focus .tj-coach-heading { color:var(--neg); }
+.tj-coach-card p { margin:6px 0 0; color:var(--text-muted); font-size:12px; line-height:1.55; }
+
 @media (max-width: 640px) {
   .tj-hero-value { font-size:32px; }
   .tj-log-pnl { margin-left:0; }
   .tj-log-actions { margin-left:auto; }
+  .tj-binance-import { margin-left:14px; margin-right:14px; }
+  .tj-import-heading { flex-direction:column; }
+  .tj-coach-grid { grid-template-columns:1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
