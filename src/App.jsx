@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   LineChart,
   Line,
@@ -12,6 +12,9 @@ import {
   Pencil,
   Trash2,
   X,
+  Mail,
+  Lock,
+  Zap,
   Flame,
   Trophy,
   Shield,
@@ -27,11 +30,9 @@ import {
   ClipboardCheck,
   Brain,
   Target,
-  Clock3,
   AlertTriangle,
 } from "lucide-react";
 
-const STORAGE_KEY = "trades";
 const DEFAULT_COINS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE"];
 
 // ---- Setup taxonomy (optional fields on every trade) ----
@@ -55,37 +56,25 @@ function fileExt(name) {
   const m = /\.([a-zA-Z0-9]+)$/.exec(name || "");
   return m ? m[1].toLowerCase() : "png";
 }
-
-// ---- PREVIEW MODE: Firebase auth/storage swapped for in-memory demo data ----
-function daysAgo(n, h, m) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  d.setHours(h, m, 0, 0);
-  const pad = (x) => String(x).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function buildSeedTrades() {
-  return [
-    { id: "seed-1", datetime: daysAgo(12, 9, 20), coin: "BTC", direction: "long", entry: 60250, exit: 61100, margin: 500, pnl: 42.5, note: "Session low-এ absorption ধরেছিলাম, buyer initiative স্পষ্ট ছিল", noteImportant: true, approach: "strong", entryModel: "balanced", proofLink: "", screenshotUrl: "https://placehold.co/320x200/1A1E27/E8A33D?text=BTC+Chart", source: "gg-short", sourceOther: "" },
-    { id: "seed-2", datetime: daysAgo(11, 14, 5), coin: "ETH", direction: "short", entry: 3400, exit: 3450, margin: 300, pnl: -27, note: "তাড়াহুড়ো করে ঢুকেছিলাম, retest-এর জন্য অপেক্ষা করিনি", noteImportant: true, approach: "weak", entryModel: "aggressive", proofLink: "https://example.com/chart-proof/eth-short", screenshotUrl: "", source: "binance-killer", sourceOther: "" },
-    { id: "seed-3", datetime: daysAgo(9, 10, 40), coin: "SOL", direction: "long", entry: 148, exit: 152.4, margin: 200, pnl: 30, note: "Textbook setup — clean absorption then structure break", noteImportant: false, approach: "strong", entryModel: "balanced", proofLink: "", screenshotUrl: "https://placehold.co/320x200/1A1E27/3ECF8E?text=SOL+Chart", source: "gg-short", sourceOther: "" },
-    { id: "seed-4", datetime: daysAgo(8, 16, 15), coin: "BTC", direction: "short", entry: 62000, exit: 61600, margin: 400, pnl: 16, note: "Sweep + reclaim পর pullback থেকে conservative entry", noteImportant: false, approach: "strong", entryModel: "conservative", proofLink: "", screenshotUrl: "", source: "", sourceOther: "" },
-    { id: "seed-5", datetime: daysAgo(6, 11, 0), coin: "JUP", direction: "long", entry: 0.82, exit: 0.79, margin: 250, pnl: -18, note: "সাইজ বেশি নিয়ে ফেলেছিলাম, মাথা ঠান্ডা ছিল না", noteImportant: true, approach: "weak", entryModel: "aggressive", proofLink: "", screenshotUrl: "", source: "others", sourceOther: "Twitter call" },
-    { id: "seed-6", datetime: daysAgo(5, 9, 50), coin: "ETH", direction: "long", entry: 3300, exit: 3410, margin: 350, pnl: 38.5, note: "Absorption-এর পর buyer imbalance স্পষ্ট ছিল", noteImportant: false, approach: "strong", entryModel: "balanced", proofLink: "https://example.com/chart-proof/eth-long", screenshotUrl: "", source: "gg-short", sourceOther: "" },
-    { id: "seed-7", datetime: daysAgo(4, 13, 25), coin: "BNB", direction: "short", entry: 590, exit: 601, margin: 300, pnl: -22, note: "Weak approach ছিল, বুঝেও early ঢুকে গেছিলাম", noteImportant: true, approach: "weak", entryModel: "aggressive", proofLink: "", screenshotUrl: "", source: "binance-killer", sourceOther: "" },
-    { id: "seed-8", datetime: daysAgo(2, 10, 5), coin: "BTC", direction: "long", entry: 63100, exit: 64050, margin: 500, pnl: 47.5, note: "Clean model B entry, full checklist মিলেছিল", noteImportant: false, approach: "strong", entryModel: "balanced", proofLink: "", screenshotUrl: "https://placehold.co/320x200/1A1E27/E8A33D?text=BTC+Chart+2", source: "gg-short", sourceOther: "" },
-    { id: "seed-9", datetime: daysAgo(1, 15, 40), coin: "SOL", direction: "short", entry: 155, exit: 157, margin: 200, pnl: -13, note: "শুধু divergence দেখে ঢুকেছিলাম, structure shift confirm হয়নি", noteImportant: false, approach: "weak", entryModel: "aggressive", proofLink: "", screenshotUrl: "", source: "binance-killer", sourceOther: "" },
-    { id: "seed-10", datetime: daysAgo(0, 9, 10), coin: "BTC", direction: "long", entry: 64200, exit: 64980, margin: 500, pnl: 39, note: "Sweep + reclaim + retest hold, conservative model", noteImportant: false, approach: "strong", entryModel: "conservative", proofLink: "", screenshotUrl: "", source: "gg-short", sourceOther: "" },
-  ];
-}
-
-function buildSeedPlans() {
-  return [
-    { id: "plan-seed-1", datetime: nowUTC6Input(), coin: "BTC", direction: "long", note: "62,000 VPOC-এ retest হয়ে হোল্ড করলে long — গতকালের absorption zone, আগে থেকে shortlist করা।" },
-    { id: "plan-seed-2", datetime: nowUTC6Input(), coin: "ETH", direction: "short", note: "3,450 resistance-এ rejection candle confirm হলে short — 4H-তে weak approach, বেশি expect করছি না, ছোট size।" },
-  ];
-}
+import { auth, db, storage } from "./firebase";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  setDoc,
+} from "firebase/firestore";
+import {
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+} from "firebase/storage";
 
 function nowLocalInput() {
   const d = new Date();
@@ -287,8 +276,8 @@ const emptyForm = () => ({
   duration: "",
   openedAt: "",
   closedAt: "",
-  status: "",
   contract: "",
+  status: "",
 });
 
 function parseBinancePositionHistory(raw) {
@@ -299,8 +288,8 @@ function parseBinancePositionHistory(raw) {
     .replace(/[ \t]+/g, " ")
     .replace(/\n\s+/g, "\n")
     .trim();
-  const valueAfter = (label) => {
-    const match = text.match(new RegExp(`${label}\\s*\\n?\\s*([^\\n]+)`, "i"));
+  const valueAfter = (label, flags = "i") => {
+    const match = text.match(new RegExp(`${label}\\s*\\n?\\s*([^\\n]+)`, flags));
     return match ? match[1].trim() : "";
   };
   const cleanNumber = (value) => {
@@ -328,6 +317,12 @@ function parseBinancePositionHistory(raw) {
   const status = text.match(/\b(Open|Closed)\b(?=\s*\n|\s+\d{2}\/)/i)?.[1] || "";
   const openedAt = dateToInput(openedRaw);
   const closedAt = dateToInput(closedRaw);
+  const importedNote = [
+    leverage ? `${leverage}x leverage` : "",
+    duration ? `lasting ${duration}` : "",
+    closedVolume ? `closed ${closedVolume} ${coin}` : "",
+    maxOi ? `max OI ${maxOi} ${coin}` : "",
+  ].filter(Boolean).join(" · ");
   return {
     ...emptyForm(),
     coin,
@@ -339,12 +334,7 @@ function parseBinancePositionHistory(raw) {
     pnl,
     margin: roi && pnl ? String((parseFloat(pnl) / (parseFloat(roi) / 100)).toFixed(2)) : "",
     datetime: closedAt || openedAt || nowLocalInput(),
-    note: [
-      leverage ? `${leverage}x leverage` : "",
-      duration ? `lasting ${duration}` : "",
-      closedVolume ? `closed ${closedVolume} ${coin}` : "",
-      maxOi ? `max OI ${maxOi} ${coin}` : "",
-    ].filter(Boolean).join(" · "),
+    note: importedNote,
     leverage,
     maxOi,
     closedVolume,
@@ -365,8 +355,15 @@ const emptyPlanForm = () => ({
 });
 
 export default function TradeJournal() {
-  const [trades, setTrades] = useState(buildSeedTrades());
-  const [plans, setPlans] = useState(buildSeedPlans());
+  const [trades, setTrades] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [form, setForm] = useState(emptyForm());
   const [editingId, setEditingId] = useState(null);
@@ -384,12 +381,128 @@ export default function TradeJournal() {
   const [binancePaste, setBinancePaste] = useState("");
   const [binanceImported, setBinanceImported] = useState(false);
 
-  function persist(next) {
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthReady(true);
+      setLoaded(false);
+      setTrades([]);
+      setPlans([]);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (!authReady || !user) {
+      if (authReady && !user) setLoaded(true);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const [tradesSnap, plansSnap] = await Promise.all([
+          getDocs(collection(db, "users", user.uid, "trades")),
+          getDocs(collection(db, "users", user.uid, "plans")),
+        ]);
+        const loadedTrades = tradesSnap.docs.map((item) => ({
+          id: item.id,
+          ...item.data(),
+        }));
+        loadedTrades.sort(
+          (a, b) => new Date(b.datetime) - new Date(a.datetime)
+        );
+        const loadedPlans = plansSnap.docs.map((item) => ({
+          id: item.id,
+          ...item.data(),
+        }));
+        loadedPlans.sort(
+          (a, b) => new Date(b.datetime) - new Date(a.datetime)
+        );
+        if (!cancelled) {
+          setTrades(loadedTrades);
+          setPlans(loadedPlans);
+        }
+      } catch (e) {
+        console.error("Failed to load journal", e);
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, user]);
+
+  async function persist(next) {
+    if (!user) return;
     setTrades(next);
+    try {
+      const existing = new Set(next.map((trade) => trade.id));
+      const snapshot = await getDocs(
+        collection(db, "users", user.uid, "trades")
+      );
+
+      await Promise.all(
+        snapshot.docs
+          .filter((item) => !existing.has(item.id))
+          .map((item) => deleteDoc(item.ref))
+      );
+
+      await Promise.all(
+        next.map((trade) =>
+          setDoc(doc(db, "users", user.uid, "trades", trade.id), trade)
+        )
+      );
+    } catch (e) {
+      console.error("Failed to save journal", e);
+      setFormError("Could not save to Firebase. Please try again.");
+    }
   }
 
-  function persistPlans(next) {
+  async function persistPlans(next) {
+    if (!user) return;
     setPlans(next);
+    try {
+      const existing = new Set(next.map((plan) => plan.id));
+      const snapshot = await getDocs(
+        collection(db, "users", user.uid, "plans")
+      );
+
+      await Promise.all(
+        snapshot.docs
+          .filter((item) => !existing.has(item.id))
+          .map((item) => deleteDoc(item.ref))
+      );
+
+      await Promise.all(
+        next.map((plan) =>
+          setDoc(doc(db, "users", user.uid, "plans", plan.id), plan)
+        )
+      );
+    } catch (e) {
+      console.error("Failed to save plans", e);
+      setPlanFormError("Could not save to Firebase. Please try again.");
+    }
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setLoginError("");
+    setLoggingIn(true);
+    try {
+      await signInWithEmailAndPassword(
+        auth,
+        loginEmail.trim(),
+        loginPassword
+      );
+      setLoginPassword("");
+    } catch {
+      setLoginError("Login failed. Check your email and password.");
+    } finally {
+      setLoggingIn(false);
+    }
   }
 
   function handleScreenshotChange(e) {
@@ -398,12 +511,6 @@ export default function TradeJournal() {
     setScreenshotFile(file);
     setScreenshotPreview(URL.createObjectURL(file));
     setFormError("");
-  }
-
-  function removeScreenshot() {
-    setScreenshotFile(null);
-    setScreenshotPreview("");
-    setForm((f) => ({ ...f, screenshotUrl: "" }));
   }
 
   function importBinanceTrade() {
@@ -417,6 +524,19 @@ export default function TradeJournal() {
     setBinanceImported(true);
     setFormError("");
     setTimeout(() => setBinanceImported(false), 2200);
+  }
+
+  async function removeScreenshot() {
+    if (form.screenshotUrl) {
+      try {
+        await deleteObject(storageRef(storage, form.screenshotUrl));
+      } catch {
+        // best-effort — file may already be gone, or URL wasn't a storage ref
+      }
+    }
+    setScreenshotFile(null);
+    setScreenshotPreview("");
+    setForm((f) => ({ ...f, screenshotUrl: "" }));
   }
 
   async function handleSubmit(e) {
@@ -453,11 +573,18 @@ export default function TradeJournal() {
     let screenshotUrl = form.screenshotUrl;
 
     if (screenshotFile) {
-      // Preview mode: no real Firebase Storage — just simulate an upload delay
-      // and use the local object URL as a stand-in for the hosted download URL.
       setUploadingShot(true);
-      await new Promise((res) => setTimeout(res, 500));
-      screenshotUrl = screenshotPreview;
+      try {
+        const path = `trade-screenshots/${user.uid}/${tradeId}.${fileExt(screenshotFile.name)}`;
+        const fileRef = storageRef(storage, path);
+        await uploadBytes(fileRef, screenshotFile);
+        screenshotUrl = await getDownloadURL(fileRef);
+      } catch (e) {
+        console.error("Screenshot upload failed", e);
+        setUploadingShot(false);
+        setFormError("Screenshot upload failed. Check Firebase Storage setup and try again.");
+        return;
+      }
       setUploadingShot(false);
     }
 
@@ -484,8 +611,8 @@ export default function TradeJournal() {
       duration: form.duration || "",
       openedAt: form.openedAt || "",
       closedAt: form.closedAt || "",
-      status: form.status || "",
       contract: form.contract || "",
+      status: form.status || "",
     };
     const wasEditing = Boolean(editingId);
     const xp = 10 + (form.approach ? 2 : 0) + (form.entryModel ? 2 : 0) + (form.source ? 2 : 0) + (form.proofLink.trim() || screenshotUrl ? 3 : 0);
@@ -526,8 +653,8 @@ export default function TradeJournal() {
       duration: t.duration || "",
       openedAt: t.openedAt || "",
       closedAt: t.closedAt || "",
-      status: t.status || "",
       contract: t.contract || "",
+      status: t.status || "",
     });
     setScreenshotFile(null);
     setScreenshotPreview(t.screenshotUrl || "");
@@ -565,7 +692,11 @@ export default function TradeJournal() {
     setPendingDeleteId(id);
   }
   function confirmDelete(id) {
+    const target = trades.find((t) => t.id === id);
     persist(trades.filter((t) => t.id !== id));
+    if (target && target.screenshotUrl) {
+      deleteObject(storageRef(storage, target.screenshotUrl)).catch(() => {});
+    }
     if (editingId === id) cancelEdit();
     setPendingDeleteId(null);
   }
@@ -891,21 +1022,21 @@ export default function TradeJournal() {
     const strong = filteredTrades.filter((t) => t.approach === "strong");
     const weak = filteredTrades.filter((t) => t.approach === "weak");
     const highLeverage = filteredTrades.filter((t) => Number(t.leverage) >= 10);
-    const groupBy = (items, key) => {
-      const groups = new Map();
-      items.forEach((t) => {
-        const label = t[key] || "Unlabeled";
-        if (!groups.has(label)) groups.set(label, []);
-        groups.get(label).push(t);
-      });
-      return Array.from(groups.entries()).map(([label, rows]) => ({
+    const groups = new Map();
+    filteredTrades.forEach((t) => {
+      const label = t.entryModel || "Unlabeled";
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(t);
+    });
+    const models = Array.from(groups.entries())
+      .map(([label, rows]) => ({
         label,
         trades: rows.length,
         pnl: rows.reduce((s, t) => s + t.pnl, 0),
         winRate: rows.length ? (rows.filter((t) => t.pnl > 0).length / rows.length) * 100 : 0,
-      })).sort((a, b) => b.pnl - a.pnl);
-    };
-    const models = groupBy(filteredTrades, "entryModel").filter((x) => x.label !== "Unlabeled");
+      }))
+      .filter((x) => x.label !== "Unlabeled")
+      .sort((a, b) => b.pnl - a.pnl);
     const bestModel = models[0];
     const focus = [];
     const strengths = [];
@@ -974,6 +1105,201 @@ export default function TradeJournal() {
     { id: "log", label: "Log" },
   ];
 
+  if (!authReady) {
+    return (
+      <div className="tj-app tj-loading">
+        <style>{css}</style>
+        <span className="tj-mono">Connecting to Firebase…</span>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="tj-app tj-auth-screen">
+        <style>{css}</style>
+
+        {/* Ambient backdrop: night sky, drifting embers, distant waves */}
+        <div className="tj-auth-bg" aria-hidden="true">
+          <div className="tj-auth-glow tj-auth-glow-a" />
+          <div className="tj-auth-glow tj-auth-glow-b" />
+          <div className="tj-auth-stars" />
+          <div className="tj-auth-embers">
+            {Array.from({ length: 14 }).map((_, i) => (
+              <span
+                key={i}
+                className="tj-ember"
+                style={{
+                  left: `${(i * 71 + 9) % 100}%`,
+                  animationDelay: `${(i % 7) * 0.85}s`,
+                  animationDuration: `${8 + (i % 5)}s`,
+                  "--c":
+                    i % 3 === 0
+                      ? "var(--accent)"
+                      : i % 3 === 1
+                      ? "var(--mana)"
+                      : "var(--pos)",
+                }}
+              />
+            ))}
+          </div>
+          <div className="tj-auth-waves">
+            <svg className="tj-wave tj-wave-back" viewBox="0 0 2400 200" preserveAspectRatio="none">
+              <path d="M0,110 C150,60 300,150 450,110 C600,70 750,150 900,110 C1050,70 1200,150 1350,110 C1500,70 1650,150 1800,110 C1950,70 2100,150 2250,110 L2400,110 L2400,200 L0,200 Z" />
+            </svg>
+            <svg className="tj-wave tj-wave-front" viewBox="0 0 2400 200" preserveAspectRatio="none">
+              <path d="M0,140 C180,90 320,170 500,140 C680,110 820,180 1000,140 C1180,100 1320,170 1500,140 C1680,110 1820,180 2000,140 C2180,100 2320,170 2400,150 L2400,200 L0,200 Z" />
+            </svg>
+          </div>
+        </div>
+
+        <div className="tj-auth-stage">
+          <div className="tj-auth-panel">
+            {/* Summoning circle behind the terminal */}
+            <svg className="tj-auth-circle" viewBox="0 0 400 400" aria-hidden="true">
+              <defs>
+                <radialGradient id="tjAuthGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="var(--mana)" stopOpacity="0.35" />
+                  <stop offset="100%" stopColor="var(--mana)" stopOpacity="0" />
+                </radialGradient>
+              </defs>
+              <circle cx="200" cy="200" r="150" fill="url(#tjAuthGlow)" />
+              <g className="tj-circle-ring tj-circle-ring-outer">
+                <circle cx="200" cy="200" r="178" fill="none" stroke="var(--mana)" strokeWidth="1" strokeDasharray="1 9" opacity="0.55" />
+              </g>
+              <g className="tj-circle-ring tj-circle-ring-mid">
+                <circle cx="200" cy="200" r="148" fill="none" stroke="var(--accent)" strokeWidth="1.5" strokeDasharray="20 14" opacity="0.4" />
+                <rect x="-6" y="-6" width="12" height="12" transform="translate(200,22) rotate(45)" fill="var(--accent)" opacity="0.6" />
+                <rect x="-6" y="-6" width="12" height="12" transform="translate(378,200) rotate(45)" fill="var(--accent)" opacity="0.6" />
+                <rect x="-6" y="-6" width="12" height="12" transform="translate(200,378) rotate(45)" fill="var(--accent)" opacity="0.6" />
+                <rect x="-6" y="-6" width="12" height="12" transform="translate(22,200) rotate(45)" fill="var(--accent)" opacity="0.6" />
+              </g>
+              <g className="tj-circle-ring tj-circle-ring-inner">
+                <circle cx="200" cy="200" r="118" fill="none" stroke="var(--mana)" strokeWidth="1" opacity="0.5" />
+              </g>
+              <g className="tj-circle-spark">
+                <circle cx="200" cy="22" r="3.5" fill="var(--accent)" />
+              </g>
+            </svg>
+
+            <form className="tj-auth-card" onSubmit={handleLogin}>
+              <span className="tj-auth-corner tj-auth-corner-tl" />
+              <span className="tj-auth-corner tj-auth-corner-tr" />
+              <span className="tj-auth-corner tj-auth-corner-bl" />
+              <span className="tj-auth-corner tj-auth-corner-br" />
+
+              <div className="tj-auth-eyebrow tj-mono">
+                <span className="tj-auth-eyebrow-dot" />
+                Trader Guild · Access Terminal
+              </div>
+
+              <h1 className="tj-display tj-auth-title">Trade Journal</h1>
+              <p className="tj-auth-tagline">
+                Chart the seas, hunt the gains, and level up every trade.
+              </p>
+
+              <label className="tj-auth-field">
+                <span className="tj-auth-label">
+                  <Mail size={13} strokeWidth={2.2} />
+                  Email
+                </span>
+                <div className="tj-auth-input-wrap">
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    autoComplete="email"
+                    placeholder="you@guild.com"
+                    required
+                  />
+                  <span className="tj-auth-input-glow" />
+                </div>
+              </label>
+
+              <label className="tj-auth-field">
+                <span className="tj-auth-label">
+                  <Lock size={13} strokeWidth={2.2} />
+                  Password
+                </span>
+                <div className="tj-auth-input-wrap">
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    required
+                  />
+                  <span className="tj-auth-input-glow" />
+                </div>
+              </label>
+
+              {loginError && (
+                <div className="tj-auth-error" role="alert">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                    <path d="M12 3 L22 20 L2 20 Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                    <line x1="12" y1="9" x2="12" y2="14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <circle cx="12" cy="17" r="1" fill="currentColor" />
+                  </svg>
+                  {loginError}
+                </div>
+              )}
+
+              <button type="submit" className="tj-auth-btn" disabled={loggingIn}>
+                <span className="tj-auth-btn-shine" />
+                {loggingIn ? (
+                  <span className="tj-auth-btn-content">
+                    <span className="tj-auth-spinner" />
+                    Opening the gate…
+                  </span>
+                ) : (
+                  <span className="tj-auth-btn-content">
+                    <Zap size={16} strokeWidth={2.4} />
+                    Enter the Guild
+                  </span>
+                )}
+              </button>
+
+              <p className="tj-auth-footnote">Your journal, secured &amp; synced.</p>
+            </form>
+          </div>
+
+          <div
+            className={`tj-auth-slime ${loggingIn ? "tj-auth-slime-cheer" : ""} ${
+              loginError ? "tj-auth-slime-sad" : ""
+            }`}
+            aria-hidden="true"
+          >
+            <svg viewBox="0 0 120 96">
+              <ellipse className="tj-slime-shadow" cx="60" cy="90" rx="34" ry="5" />
+              <path
+                className="tj-slime-body"
+                d="M60,10 C82,10 100,32 100,54 C100,76 82,90 60,90 C38,90 20,76 20,54 C20,32 38,10 60,10 Z"
+              />
+              <ellipse className="tj-slime-shine" cx="42" cy="34" rx="9" ry="6" />
+              <g className="tj-slime-eyes">
+                <ellipse cx="48" cy="52" rx="4" ry="5.5" fill="#12141A" />
+                <ellipse cx="74" cy="52" rx="4" ry="5.5" fill="#12141A" />
+              </g>
+              <path className="tj-slime-mouth" d="M52,64 Q61,70 70,64" stroke="#12141A" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+              <ellipse cx="40" cy="60" rx="4.5" ry="3" className="tj-slime-blush" />
+              <ellipse cx="82" cy="60" rx="4.5" ry="3" className="tj-slime-blush" />
+            </svg>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!loaded) {
+    return (
+      <div className="tj-app tj-loading">
+        <style>{css}</style>
+        <span className="tj-mono">Loading journal…</span>
+      </div>
+    );
+  }
+
   const ticketMood = ticketMoodFor(form);
 
   return (
@@ -988,16 +1314,16 @@ export default function TradeJournal() {
           </p>
         </div>
         <div className="tj-header-actions">
-          <span className="tj-tag tj-tag-level">Preview · demo data (not saved)</span>
           <button
             type="button"
             className="tj-link-btn tj-muted"
-            onClick={() => { setTrades(buildSeedTrades()); setPlans(buildSeedPlans()); }}
+            onClick={() => signOut(auth)}
           >
-            Reset demo data
+            Sign out
           </button>
         </div>
       </header>
+
       <form className="tj-ticket" onSubmit={handleSubmit}>
         <TicketMascot mood={ticketMood.state} line={ticketMood.line} celebrating={celebration.show} />
         {celebration.show && (
@@ -1022,7 +1348,7 @@ export default function TradeJournal() {
           <div className="tj-import-heading">
             <div>
               <strong><ClipboardPaste size={15} /> Quick import from Binance</strong>
-              <span>Paste one closed position. The journal will extract the context that matters for review.</span>
+              <span>Copy one closed position from Binance → paste it here → review the filled fields.</span>
             </div>
             {binanceImported && <span className="tj-import-success"><ClipboardCheck size={14} /> Fields filled</span>}
           </div>
@@ -1030,14 +1356,14 @@ export default function TradeJournal() {
             className="tj-import-textarea"
             value={binancePaste}
             onChange={(e) => setBinancePaste(e.target.value)}
-            placeholder={"ATOMUSDT\nPerp\n15x\nCross Long\n…paste the full Binance position-history block"}
+            placeholder={"Example: ATOMUSDT · Perp · 15x · Cross Long …\nPaste the complete Binance position-history text here"}
             aria-label="Paste Binance position history"
           />
           <div className="tj-import-actions">
             <button type="button" className="tj-btn-import" onClick={importBinanceTrade} disabled={!binancePaste.trim()}>
               <ClipboardPaste size={15} /> Parse &amp; fill trade
             </button>
-            <span className="tj-import-hint">Prices · PNL · ROI · dates · leverage · volume · duration · Max OI</span>
+            <span className="tj-import-hint">PNL, ROI, prices, dates, direction, leverage, volume and duration are captured.</span>
           </div>
         </div>
 
@@ -1996,7 +2322,8 @@ function PlansView({
         <label className="tj-field tj-field-note" style={{ marginTop: 14 }}>
           <span>Note</span>
           <textarea
-            rows={3}            placeholder="What's the plan, and why — level, context, the trigger you're waiting for"
+            rows={3}
+            placeholder="What's the plan, and why — level, context, the trigger you're waiting for"
             value={planForm.note}
             onChange={(e) => setPlanForm({ ...planForm, note: e.target.value })}
           />
@@ -2748,12 +3075,6 @@ const css = `
   margin: 0 22px 18px; padding: 14px; border: 1px solid rgba(124,108,255,0.28);
   border-radius: 12px; background: linear-gradient(135deg, rgba(124,108,255,0.09), rgba(124,108,255,0.03));
 }
-.tj-btn-plan {
-  display:inline-flex; align-items:center; gap:6px; border:1px solid rgba(124,108,255,0.45);
-  background:rgba(124,108,255,0.10); color:#bcb7ff; border-radius:8px; padding:8px 11px;
-  font:600 12px 'Space Grotesk',sans-serif; cursor:pointer;
-}
-.tj-btn-plan:hover { border-color:var(--mana); background:rgba(124,108,255,0.18); }
 .tj-import-heading { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:10px; }
 .tj-import-heading strong { display:flex; align-items:center; gap:7px; font-family:'Space Grotesk',sans-serif; font-size:13px; }
 .tj-import-heading > div > span { display:block; margin-top:4px; color:var(--text-muted); font-size:11px; }
@@ -2772,6 +3093,12 @@ const css = `
 .tj-btn-import:hover { filter:brightness(1.08); }
 .tj-btn-import:disabled { opacity:.45; cursor:not-allowed; }
 .tj-import-hint { color:var(--text-muted); font-size:11px; }
+.tj-btn-plan {
+  display:inline-flex; align-items:center; gap:6px; border:1px solid rgba(124,108,255,0.45);
+  background:rgba(124,108,255,0.10); color:#bcb7ff; border-radius:8px; padding:8px 11px;
+  font:600 12px 'Space Grotesk',sans-serif; cursor:pointer;
+}
+.tj-btn-plan:hover { border-color:var(--mana); background:rgba(124,108,255,0.18); }
 
 .tj-coach-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:16px; }
 .tj-coach-card { border-radius:12px; padding:14px 16px; border:1px solid var(--border); background:var(--surface); }
